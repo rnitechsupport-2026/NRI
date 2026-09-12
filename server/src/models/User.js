@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, trim: true, lowercase: true, maxlength: 160 },
     phone: { type: String, required: true, trim: true, maxlength: 20 },
     passwordHash: { type: String, required: true, select: false },
-    role: { type: String, enum: ['owner', 'agent', 'builder', 'service', 'admin'], default: 'owner' },
+    role: { type: String, enum: ['owner', 'buyer', 'agent', 'builder', 'service', 'admin', 'employee'], default: 'owner' },
     companyName: { type: String, trim: true, maxlength: 160 },
     reraId: { type: String, trim: true, maxlength: 60 },
     serviceCategory: { type: String, trim: true, maxlength: 80 },
@@ -20,7 +20,9 @@ const userSchema = new mongoose.Schema(
     website: { type: String, trim: true, maxlength: 200 },
     isVerified: { type: Boolean, default: false },
     status: { type: String, enum: ['active', 'suspended'], default: 'active' },
+    approvalStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'approved' },
     lastLoginAt: { type: Date },
+    managedPortals: { type: [String], enum: ['owner', 'agent', 'builder', 'service'], default: [] },
   },
   { timestamps: true }
 );

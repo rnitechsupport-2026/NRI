@@ -53,4 +53,15 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { signToken, requireAuth, optionalAuth, requireRole };
+/** Blocks posting listings until an admin has approved the account. */
+function requireApproved(req, res, next) {
+  if (req.user?.approvalStatus === 'pending') {
+    return res.status(403).json({ message: 'Your account is pending admin approval. You can post listings once approved.' });
+  }
+  if (req.user?.approvalStatus === 'rejected') {
+    return res.status(403).json({ message: 'Your account application was not approved. Contact support for details.' });
+  }
+  next();
+}
+
+module.exports = { signToken, requireAuth, optionalAuth, requireRole, requireApproved };

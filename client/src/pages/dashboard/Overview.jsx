@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { Avatar, Empty, PageLoader } from '../../components/ui.jsx';
@@ -10,6 +13,14 @@ import {
 } from '../../components/Icons.jsx';
 
 const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Literal hex, not CSS var() — recharts fill/stroke props need real color values.
+const BRAND_GREEN = '#23cc01';
+const BRAND_ORANGE = '#f4560d';
+
+const CHART_TOOLTIP_STYLE = {
+  borderRadius: 10, border: '1px solid #e4e8ef', fontSize: 13, boxShadow: '0 8px 20px rgba(15,27,45,.08)',
+};
 
 export default function Overview() {
   const { user } = useAuth();
@@ -24,15 +35,16 @@ export default function Overview() {
   const kpis = [
     { icon: Home, label: 'Total listings', value: d.listings ?? 0, tint: 'var(--blue-bg)', color: 'var(--blue)' },
     { icon: Eye, label: 'Total views', value: (d.views ?? 0).toLocaleString('en-IN'), tint: 'var(--gold-100)', color: 'var(--gold-600)' },
-    { icon: Inbox, label: 'Enquiries', value: d.leads ?? 0, tint: 'var(--green-bg)', color: 'var(--green)' },
+    {
+      icon: Inbox, label: 'Enquiries', value: d.leads ?? 0, tint: 'var(--green-bg)', color: 'var(--green)',
+      trendPct: d.leads_trend_pct,
+    },
     { icon: Heart, label: 'Shortlisted', value: d.shortlisted ?? 0, tint: 'var(--red-bg)', color: 'var(--red)' },
     ...(d.projects !== undefined
       ? [{ icon: Building, label: 'Projects', value: d.projects, tint: 'var(--line-2)', color: 'var(--navy-700)' }] : []),
     ...(d.services !== undefined
       ? [{ icon: Wrench, label: 'Services', value: d.services, tint: 'var(--line-2)', color: 'var(--navy-700)' }] : []),
   ];
-
-  const maxTrend = Math.max(1, ...(d.trend || []).map((t) => t.count));
 
   return (
     <div className="stack" style={{ gap: 22 }}>
@@ -67,11 +79,17 @@ export default function Overview() {
 
       {/* kpis */}
       <div className="kpi-grid">
-        {kpis.map(({ icon: Icon, label, value, tint, color }) => (
+        {kpis.map(({ icon: Icon, label, value, tint, color, trendPct }) => (
           <div key={label} className="card kpi">
             <div className="ic" style={{ background: tint, color }}><Icon /></div>
             <b>{value}</b>
             <span>{label}</span>
+            {trendPct != null && (
+              <span className="trend" style={{ color: trendPct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                <Trending style={{ width: 12, height: 12, verticalAlign: -1, transform: trendPct < 0 ? 'scaleY(-1)' : 'none' }} />
+                {' '}{trendPct >= 0 ? '+' : ''}{trendPct}% this month
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -88,50 +106,74 @@ export default function Overview() {
           {(!d.trend || d.trend.length === 0) ? (
             <p className="muted small">No enquiry data yet. Your first lead will show up here.</p>
           ) : (
-            <div className="chart">
-              {d.trend.map((t) => {
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={d.trend.map((t) => {
                 const [y, m] = t.month.split('-');
-                return (
-                  <div className="chart-col" key={t.month}>
-                    <div className="chart-bar" style={{ height: `${(t.count / maxTrend) * 100}%` }}>
-                      <b>{t.count}</b>
-                    </div>
-                    <span>{MONTH[Number(m) - 1]} {String(y).slice(2)}</span>
-                  </div>
-                );
-              })}
-            </div>
+                return { name: `${MONTH[Number(m) - 1]} '${String(y).slice(2)}`, count: t.count };
+              })} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="enqFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={BRAND_GREEN} stopOpacity={0.35} />
+                    <stop offset="95%" stopColor={BRAND_GREEN} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eff2f7" />
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#63748c' }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#63748c' }} axisLine={false} tickLine={false} width={30} />
+                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                <Area type="monotone" dataKey="count" name="Enquiries" stroke={BRAND_GREEN} strokeWidth={2.5}
+                      fill="url(#enqFill)" activeDot={{ r: 5 }} />
+              </AreaChart>
+            </ResponsiveContainer>
           )}
         </div>
 
-        {/* lead status */}
+        {/* this week */}
         <div className="card card-p">
-          <h3 className="mb-2">Enquiry pipeline</h3>
-          {(!d.leads_by_status || d.leads_by_status.length === 0) ? (
-            <p className="muted small">No enquiries yet.</p>
+          <h3 className="mb-2">Enquiries this week</h3>
+          {(!d.trend_week || d.trend_week.every((w) => w.count === 0)) ? (
+            <p className="muted small">No enquiries in the last 7 days yet.</p>
           ) : (
-            <div className="stack" style={{ gap: 12 }}>
-              {d.leads_by_status.map((s) => {
-                const meta = LEAD_STATUS[s.status] || { label: s.status, cls: 'badge-outline' };
-                const pct = Math.round((s.count / Math.max(1, d.leads)) * 100);
-                return (
-                  <div key={s.status}>
-                    <div className="row-between small mb-1">
-                      <span className={`badge ${meta.cls}`}>{meta.label}</span>
-                      <span className="strong">{s.count}</span>
-                    </div>
-                    <div style={{ height: 7, background: 'var(--line-2)', borderRadius: 99, overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: 'var(--navy-700)', borderRadius: 99 }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={d.trend_week} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eff2f7" />
+                <XAxis dataKey="day" tick={{ fontSize: 12, fill: '#63748c' }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#63748c' }} axisLine={false} tickLine={false} width={30} />
+                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: 'rgba(244,86,13,.06)' }} />
+                <Bar dataKey="count" name="Enquiries" fill={BRAND_ORANGE} radius={[6, 6, 2, 2]} maxBarSize={36} />
+              </BarChart>
+            </ResponsiveContainer>
           )}
-          <Link to="/dashboard/leads" className="btn btn-outline btn-sm btn-block mt-3">
-            Manage enquiries <ArrowRight />
-          </Link>
         </div>
+      </div>
+
+      {/* lead status */}
+      <div className="card card-p">
+        <div className="row-between mb-2">
+          <h3>Enquiry pipeline</h3>
+          <Link to="/dashboard/leads" className="btn btn-outline btn-sm">Manage enquiries <ArrowRight /></Link>
+        </div>
+        {(!d.leads_by_status || d.leads_by_status.length === 0) ? (
+          <p className="muted small">No enquiries yet.</p>
+        ) : (
+          <div className="grid g-3" style={{ gap: 16 }}>
+            {d.leads_by_status.map((s) => {
+              const meta = LEAD_STATUS[s.status] || { label: s.status, cls: 'badge-outline' };
+              const pct = Math.round((s.count / Math.max(1, d.leads)) * 100);
+              return (
+                <div key={s.status}>
+                  <div className="row-between small mb-1">
+                    <span className={`badge ${meta.cls}`}>{meta.label}</span>
+                    <span className="strong">{s.count}</span>
+                  </div>
+                  <div style={{ height: 7, background: 'var(--line-2)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: 'var(--navy-700)', borderRadius: 99 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* recent leads */}

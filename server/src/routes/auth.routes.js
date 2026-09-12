@@ -5,7 +5,7 @@ const User = require('../models/User');
 const { signToken, requireAuth } = require('../middleware/auth');
 const { asyncHandler, makeSlug, nn, parseJson, paginate, HttpError } = require('../utils/helpers');
 
-const ROLES = ['owner', 'agent', 'builder', 'service'];
+const ROLES = ['owner', 'buyer', 'agent', 'builder', 'service'];
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name is too short').max(120),
@@ -22,18 +22,22 @@ const registerSchema = z.object({
 
 const PUBLIC_FIELDS = 'name email phone role companyName reraId serviceCategory experienceYears city locality about avatarUrl website isVerified status createdAt';
 
+function shapeUser(doc) {
+  const obj = doc.toObject ? doc.toObject() : { ...doc };
+  obj.id = String(obj._id);
+  delete obj.passwordHash;
+  return obj;
+}
+
 router.post('/register', asyncHandler(async (req, res) => {
   const data = registerSchema.parse(req.body);
 
   const exists = await User.findOne({ $or: [{ email: data.email }, { phone: data.phone }] }).select('_id').lean();
   if (exists) throw new HttpError(409, 'An account already exists with this email or mobile number');
 
-  if (data.role === 'builder' && !data.company_name) {
-    throw new HttpError(400, 'Company name is required for builder accounts');
-  }
-  if (data.role === 'service' && !data.service_category) {
-    throw new HttpError(400, 'Please choose a service category');
-  }
+  // Builders and service providers now supply their entity/category details
+  // via their own verification wizard (builder.routes.js /
+  // service-provider.routes.js), not at account creation.
 
   const user = await User.create({
     name: data.name,
@@ -46,18 +50,20 @@ router.post('/register', asyncHandler(async (req, res) => {
     serviceCategory: nn(data.service_category),
     experienceYears: nn(data.experience_years),
     city: nn(data.city),
+    // Agent / builder / service accounts need admin sign-off before they can
+    // post listings — owners are low-risk and stay auto-approved.
+    approvalStatus: ['agent', 'builder', 'service'].includes(data.role) ? 'pending' : 'approved',
   });
 
-  const safe = user.toObject();
-  delete safe.passwordHash;
-  res.status(201).json({ token: signToken(safe), user: safe });
+  const safe = shapeUser(user);
+  res.status(201).json({ token: signToken(user), user: safe });
 }));
 
 router.post('/login', asyncHandler(async (req, res) => {
   const { email, password, role } = z.object({
     email: z.string().min(3, 'Enter your email or mobile number'),
     password: z.string().min(1, 'Enter your password'),
-    role: z.enum([...ROLES, 'admin']).optional(),
+    role: z.enum([...ROLES, 'admin', 'employee']).optional(),
   }).parse(req.body);
 
   const user = await User.findOne({ $or: [{ email }, { phone: email }] }).select('+passwordHash').lean();
@@ -73,14 +79,13 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   await User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() });
   const fresh = await User.findById(user._id).select('-passwordHash').lean();
-  const safe = fresh || user;
-  delete safe.passwordHash;
-  res.json({ token: signToken(safe), user: safe });
+  const safe = shapeUser(fresh || user);
+  res.json({ token: signToken(user), user: safe });
 }));
 
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select('-passwordHash').lean();
-  res.json({ user });
+  res.json({ user: shapeUser(user) });
 }));
 
 router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
@@ -109,7 +114,7 @@ router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(req.user._id, { $set: update });
   }
   const user = await User.findById(req.user._id).select('-passwordHash').lean();
-  res.json({ user });
+  res.json({ user: shapeUser(user) });
 }));
 
 router.put('/password', requireAuth, asyncHandler(async (req, res) => {

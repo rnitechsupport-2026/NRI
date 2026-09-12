@@ -1,3 +1,5 @@
+import { apiBase } from '../api/client.js';
+
 /** ₹ formatting the way Indian property portals do it: Cr / Lac / K. */
 export function money(value) {
   const n = Number(value || 0);
@@ -26,6 +28,11 @@ export function priceLabel(purpose, price) {
 
 export const area = (v, unit = 'sqft') =>
   v ? `${Number(v).toLocaleString('en-IN')} ${unit}` : '—';
+
+/** Bot-aware share link — WhatsApp/Facebook/etc. get a rich preview card
+ *  (real photo, price, title); real visitors are bounced straight to the
+ *  normal interactive property page (see server property.routes.js /share). */
+export const shareUrl = (property) => `${apiBase}/properties/share/${property.slug || property.id}`;
 
 export function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -61,7 +68,12 @@ export const TYPE_LABEL = {
   warehouse: 'Warehouse', farmhouse: 'Farm House',
 };
 
-export const ROLE_LABEL = { owner: 'Owner', agent: 'Agent', builder: 'Builder', service: 'Service Partner', admin: 'Admin' };
+export const ROLE_LABEL = {
+  owner: 'Owner', buyer: 'Buyer', agent: 'Agent', builder: 'Builder', service: 'Service Partner',
+  admin: 'Admin', employee: 'Employee',
+};
+
+export const PORTAL_LABEL = { owner: 'Owner', buyer: 'Buyer', agent: 'Agent', builder: 'Builder', service: 'Service' };
 
 export const LEAD_STATUS = {
   new: { label: 'New', cls: 'badge-blue' },

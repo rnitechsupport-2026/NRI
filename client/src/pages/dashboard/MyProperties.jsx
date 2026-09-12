@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import api, { errMsg } from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import { Empty, Modal, PageLoader } from '../../components/ui.jsx';
-import { money, timeAgo, titleCase, PURPOSE_LABEL } from '../../utils/format.js';
-import { Home, Plus, Edit, Trash, Eye, Inbox, Cube, ArrowRight } from '../../components/Icons.jsx';
+import { money, timeAgo, titleCase, PURPOSE_LABEL, shareUrl } from '../../utils/format.js';
+import { Home, Plus, Edit, Trash, Eye, Inbox, Cube, ArrowRight, Send } from '../../components/Icons.jsx';
 
 const STATUS_CLS = {
   active: 'badge-green', pending: 'badge-amber', sold: 'badge-navy',
@@ -52,6 +52,15 @@ export default function MyProperties() {
       toast.success(`Marked as ${titleCase(status)}`);
       load();
     } catch (e) { toast.error(errMsg(e)); }
+  }
+
+  async function copyLink(row) {
+    try {
+      await navigator.clipboard.writeText(shareUrl(row));
+      toast.success('Link copied — paste it anywhere, WhatsApp shows the photo & price automatically');
+    } catch {
+      toast.error('Could not copy the link');
+    }
   }
 
   if (rows === null) return <PageLoader label="Loading your listings…" />;
@@ -123,6 +132,10 @@ export default function MyProperties() {
                     <td className="muted small nowrap">{timeAgo(p.created_at)}</td>
                     <td>
                       <div className="row" style={{ gap: 6 }}>
+                        <button type="button" className="btn btn-xs btn-outline" title="Copy shareable link"
+                                onClick={() => copyLink(p)}>
+                          <Send />
+                        </button>
                         <Link to={`/property/${p.slug || p.id}`} className="btn btn-xs btn-outline" title="View">
                           <Eye />
                         </Link>

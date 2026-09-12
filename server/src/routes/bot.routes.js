@@ -472,12 +472,28 @@ router.delete('/saved-searches/:id', requireAuth, asyncHandler(async (req, res) 
 }));
 
 router.get('/notifications', requireAuth, asyncHandler(async (req, res) => {
-  const rows = await Notification.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(60).lean();
-  const { unread } = await Notification.aggregate([
-    { $match: { user: req.user._id, readAt: null } },
-    { $count: 'unread' },
+  const [rows, unreadAgg] = await Promise.all([
+    Notification.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(60).lean(),
+    Notification.aggregate([
+      { $match: { user: req.user._id, readAt: null } },
+      { $count: 'unread' },
+    ]),
   ]);
-  res.json({ data: rows, unread: Number(unread || 0) });
+  // aggregate() resolves to an array (empty when nothing matches) — index into
+  // it rather than destructuring it directly as an object.
+  const unread = unreadAgg[0]?.unread || 0;
+  res.json({
+    data: rows.map((n) => ({
+      id: String(n._id),
+      kind: n.kind,
+      title: n.title,
+      body: n.body,
+      link: n.link,
+      read_at: n.readAt,
+      created_at: n.createdAt,
+    })),
+    unread,
+  });
 }));
 
 router.post('/notifications/read', requireAuth, asyncHandler(async (req, res) => {

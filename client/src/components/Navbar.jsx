@@ -62,7 +62,7 @@ export default function Navbar() {
 
           <nav className="nav-links">
             {LINKS.map((l) => (
-              <NavLink key={l.to} to={l.to} className={isOn(l.to) ? 'active' : ''}>{l.label}</NavLink>
+              <NavLink key={l.to} to={l.to} className={() => (isOn(l.to) ? 'active' : '')}>{l.label}</NavLink>
             ))}
           </nav>
 
@@ -88,11 +88,22 @@ export default function Navbar() {
 
                 {menu && (
                   <div className="dropdown">
-                    <Link to="/dashboard"><Dashboard /> Dashboard</Link>
-                    <Link to="/dashboard/leads"><Inbox /> My Enquiries</Link>
-                    <Link to="/dashboard/favorites"><Heart /> Shortlist</Link>
-                    <Link to={`/profile/${user.id}`}><User /> Public Profile</Link>
-                    <Link to="/dashboard/profile"><Settings /> Account Settings</Link>
+                    {user.role === 'buyer' ? (
+                      <>
+                        <Link to="/account/enquiries"><Inbox /> My Enquiries</Link>
+                        <Link to="/account/shortlist"><Heart /> Shortlist</Link>
+                        <Link to={`/profile/${user.id}`}><User /> Public Profile</Link>
+                        <Link to="/account/settings"><Settings /> Account Settings</Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link to="/dashboard"><Dashboard /> Dashboard</Link>
+                        <Link to="/dashboard/leads"><Inbox /> My Enquiries</Link>
+                        <Link to="/dashboard/favorites"><Heart /> Shortlist</Link>
+                        <Link to={`/profile/${user.id}`}><User /> Public Profile</Link>
+                        <Link to="/dashboard/profile"><Settings /> Account Settings</Link>
+                      </>
+                    )}
                     <hr />
                     <button onClick={doLogout}><Logout /> Log out</button>
                   </div>
@@ -123,7 +134,7 @@ export default function Navbar() {
               </button>
             </div>
             {LINKS.map((l) => (
-              <NavLink key={l.to} to={l.to} className={isOn(l.to) ? 'active' : ''}>{l.label}</NavLink>
+              <NavLink key={l.to} to={l.to} className={() => (isOn(l.to) ? 'active' : '')}>{l.label}</NavLink>
             ))}
             <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '10px 0' }} />
             {isAuthed ? (

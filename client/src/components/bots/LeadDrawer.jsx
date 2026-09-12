@@ -295,23 +295,36 @@ function MessageTab({ lead, toast, onSent }) {
         {busy ? <><span className="spinner" /> Sending…</> : <><Send /> Send via {channel === 'email' ? 'email' : 'WhatsApp'}</>}
       </button>
 
-      {result && (
-        <div className={`alert ${result.status === 'sent' ? 'alert-ok' : 'alert-info'}`}>
-          <Info />
-          <span className="tiny">
-            {result.status === 'sent' && 'Delivered.'}
-            {result.status === 'skipped' && <>Queued but not delivered — {result.note}</>}
-            {result.status === 'failed' && <>Delivery failed — {result.note}</>}
-            {result.whatsapp_link && (
-              <>
-                {' '}
-                <a href={result.whatsapp_link} target="_blank" rel="noopener noreferrer" className="strong">
-                  Open in WhatsApp instead →
-                </a>
-              </>
-            )}
-          </span>
-        </div>
+      {result && (() => {
+        // This platform doesn't have WhatsApp Business API credentials
+        // configured (that's a paid, approval-gated Meta integration) — the
+        // click-to-chat link is the normal, expected way messages go out,
+        // not a failure. Only a genuine API error should read as one.
+        const isWhatsappFallback = channel === 'whatsapp' && result.status === 'skipped' && !!result.whatsapp_link;
+        return (
+          <div className={`alert ${result.status === 'sent' ? 'alert-ok' : 'alert-info'}`}>
+            <Info />
+            <span className="tiny">
+              {result.status === 'sent' && 'Delivered.'}
+              {isWhatsappFallback && 'Message ready — send it from WhatsApp below.'}
+              {result.status === 'skipped' && !isWhatsappFallback && <>Queued but not delivered — {result.note}</>}
+              {result.status === 'failed' && <>Delivery failed — {result.note}</>}
+              {result.whatsapp_link && !isWhatsappFallback && (
+                <>
+                  {' '}
+                  <a href={result.whatsapp_link} target="_blank" rel="noopener noreferrer" className="strong">
+                    Open in WhatsApp instead →
+                  </a>
+                </>
+              )}
+            </span>
+          </div>
+        );
+      })()}
+      {result && channel === 'whatsapp' && result.status === 'skipped' && result.whatsapp_link && (
+        <a href={result.whatsapp_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-block">
+          <Whatsapp /> Open WhatsApp to send
+        </a>
       )}
     </div>
   );

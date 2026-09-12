@@ -25,6 +25,22 @@ const projectSchema = new mongoose.Schema(
     status: { type: String, enum: ['upcoming', 'ongoing', 'completed'], default: 'ongoing' },
     isFeatured: { type: Boolean, default: false },
     views: { type: Number, default: 0 },
+
+    // Compliance verification — separate from `status` (construction stage) and
+    // from `reraNo` (freeform, shown on the public listing). This is the
+    // document-backed admin review gate: RERA promoter identity, land rights,
+    // government approvals. See server/src/routes/admin.routes.js.
+    verificationStatus: { type: String, enum: ['not_submitted', 'submitted', 'under_review', 'verified', 'rejected'], default: 'not_submitted' },
+    reraPromoterName: { type: String, trim: true, maxlength: 200 },
+    surveyNumbers: { type: [String], default: [] },
+    village: { type: String, trim: true, maxlength: 120 },
+    taluk: { type: String, trim: true, maxlength: 120 },
+    district: { type: String, trim: true, maxlength: 120 },
+    landOwnershipType: { type: String, enum: ['owned', 'jda_poa'] },
+    landownerName: { type: String, trim: true, maxlength: 200 },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewedAt: { type: Date },
+    reviewNote: { type: String, trim: true, maxlength: 500 },
   },
   { timestamps: true }
 );

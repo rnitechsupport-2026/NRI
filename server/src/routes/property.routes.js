@@ -5,10 +5,11 @@ const Property = require('../models/Property');
 const PropertyImage = require('../models/PropertyImage');
 const Favorite = require('../models/Favorite');
 const Lead = require('../models/Lead');
+const PriceHistory = require('../models/PriceHistory');
 const bot = require('../services/propertyBot');
 const searchBot = require('../services/searchBot');
 const { buildFilterFromParams: buildFilter, SORTS } = require('../services/filterUtil');
-const { requireAuth, optionalAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, optionalAuth, requireRole, requireApproved } = require('../middleware/auth');
 const { asyncHandler, makeSlug, nn, parseJson, paginate, HttpError } = require('../utils/helpers');
 const { parseTourEmbed, allowedHosts } = require('../utils/embed');
 
@@ -93,6 +94,175 @@ router.get('/mine/list', requireAuth, asyncHandler(async (req, res) => {
   res.json({ data: items.map((p) => ({ ...shapeDoc(p), lead_count: countMap[String(p._id)] || 0 })) });
 }));
 
+const BOT_UA_RE = /facebookexternalhit|whatsapp|twitterbot|linkedinbot|telegrambot|slackbot|discordbot|pinterest|embedly|quora link preview|vkshare|redditbot|applebot|googlebot|bingbot|w3c_validator/i;
+const PURPOSE_LABEL = { sale: 'For Sale', rent: 'For Rent', pg: 'PG / Co-living', lease: 'For Lease' };
+const TYPE_LABEL = {
+  apartment: 'Apartment', villa: 'Villa', 'independent-house': 'Independent House',
+  plot: 'Plot / Land', office: 'Office Space', shop: 'Shop / Showroom',
+  warehouse: 'Warehouse', farmhouse: 'Farm House',
+};
+
+function formatPrice(n) {
+  n = Number(n || 0);
+  const trim = (v) => v.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  if (n >= 10000000) return `₹${trim(n / 10000000)} Cr`;
+  if (n >= 100000) return `₹${trim(n / 100000)} Lac`;
+  if (n >= 1000) return `₹${trim(n / 1000)} K`;
+  return `₹${n}`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+// A crawler-facing "microsite" for a single property: WhatsApp/Facebook/etc.
+// render this SPA client-side, so they'd otherwise all see the same generic
+// index.html tags regardless of which property was shared. Real visitors are
+// bounced straight to the normal interactive page — this route never changes
+// what a human sees.
+router.get('/share/:idOrSlug', asyncHandler(async (req, res) => {
+  const key = req.params.idOrSlug;
+  const byId = /^[0-9a-fA-F]{24}$/.test(key);
+  const clientOrigin = (process.env.CLIENT_URL || 'https://rni-botmodel.vercel.app').replace(/\/$/, '');
+
+  const property = await Property.findOne(byId ? { _id: key } : { slug: key })
+    .populate({ path: 'user', select: 'name role companyName phone isVerified' })
+    .lean();
+
+  if (!property) return res.redirect(302, clientOrigin);
+
+  const targetUrl = `${clientOrigin}/property/${property.slug || key}`;
+  const isBot = BOT_UA_RE.test(req.get('user-agent') || '');
+  if (!isBot) return res.redirect(302, targetUrl);
+
+  const title = property.title;
+  const priceText = formatPrice(property.price) + (property.purpose === 'rent' || property.purpose === 'pg' || property.purpose === 'lease' ? ' / month' : '');
+  const description = [
+    property.bhk ? `${property.bhk} BHK` : null,
+    TYPE_LABEL[property.propertyType],
+    PURPOSE_LABEL[property.purpose],
+    property.locality && property.city ? `in ${property.locality}, ${property.city}` : null,
+    `— ${priceText}`,
+  ].filter(Boolean).join(' ');
+
+  const images = await PropertyImage.find({ property: property._id }).sort({ sortOrder: 1, _id: 1 }).limit(5).lean();
+  const gallery = images.filter((img) => img.url !== property.coverImage).slice(0, 4);
+  const owner = property.user || {};
+
+  const facts = [
+    ['Configuration', property.bhk ? `${property.bhk} BHK` : null],
+    ['Bathrooms', property.bathrooms || null],
+    ['Built-up area', property.builtUpArea ? `${property.builtUpArea.toLocaleString('en-IN')} ${property.areaUnit}` : null],
+    ['Furnishing', property.furnishing ? property.furnishing.replace(/-/g, ' ') : null],
+    ['Facing', property.facing || null],
+    ['Floor', property.floorNo ? `${property.floorNo} of ${property.totalFloors || '—'}` : null],
+    ['Possession', property.possession ? property.possession.replace(/-/g, ' ') : null],
+  ].filter(([, v]) => v);
+
+  const imageMetaTag = property.coverImage
+    ? `<meta property="og:image" content="${escapeHtml(property.coverImage)}">\n    <meta name="twitter:card" content="summary_large_image">`
+    : '';
+
+  const heroImg = property.coverImage || 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80';
+  const initial = (owner.name || 'R')[0].toUpperCase();
+
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)}</title>
+    <meta name="description" content="${escapeHtml(description)}">
+    <meta property="og:type" content="product">
+    <meta property="og:title" content="${escapeHtml(title)}">
+    <meta property="og:description" content="${escapeHtml(description)}">
+    <meta property="og:url" content="${escapeHtml(targetUrl)}">
+    ${imageMetaTag}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      :root { --green: #23cc01; --orange: #f4560d; --navy: #0e2a4e; --ink: #0f1b2d; --muted: #63748c; --line: #e4e8ef; --bg: #f5f7fa; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+      .wrap { max-width: 820px; margin: 0 auto; padding-bottom: 60px; }
+      .hero { position: relative; background: var(--navy); }
+      .hero img { width: 100%; height: 360px; object-fit: cover; display: block; opacity: .96; }
+      .hero-badges { position: absolute; top: 18px; left: 18px; display: flex; gap: 8px; }
+      .badge { padding: 6px 13px; border-radius: 99px; font-size: 12px; font-weight: 700; background: #fff; color: var(--navy); }
+      .badge.green { background: var(--green); color: #fff; }
+      .card { background: #fff; border-radius: 18px; box-shadow: 0 10px 34px rgba(15,27,45,.10); margin: -44px 18px 0; position: relative; padding: 30px; }
+      h1 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 26px; margin: 0 0 6px; line-height: 1.25; }
+      .price { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 30px; font-weight: 800; color: var(--green); margin-top: 8px; }
+      .addr { color: var(--muted); font-size: 14px; margin: 2px 0 0; }
+      .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 16px; padding: 20px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 22px 0; }
+      .facts b { display: block; font-size: 15px; text-transform: capitalize; }
+      .facts span { font-size: 12px; color: var(--muted); }
+      .section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 10px; }
+      .section { margin-bottom: 24px; }
+      .section p { line-height: 1.7; font-size: 14.5px; margin: 0; white-space: pre-line; }
+      .amenities { display: flex; flex-wrap: wrap; gap: 8px; }
+      .amenities span { background: var(--bg); border: 1px solid var(--line); padding: 6px 13px; border-radius: 99px; font-size: 13px; }
+      .gallery { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      .gallery img { width: 100%; height: 78px; object-fit: cover; border-radius: 10px; }
+      .contact { display: flex; align-items: center; gap: 14px; background: var(--bg); border-radius: 14px; padding: 16px; }
+      .contact .av { width: 46px; height: 46px; border-radius: 50%; background: var(--navy); color: #fff; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; }
+      .contact .nm { font-weight: 700; font-size: 14.5px; }
+      .contact .rl { font-size: 12.5px; color: var(--muted); text-transform: capitalize; }
+      .cta { display: block; text-align: center; background: var(--green); color: #fff; text-decoration: none; font-weight: 700; padding: 15px; border-radius: 12px; margin-top: 22px; font-size: 15px; }
+      .foot { text-align: center; color: var(--muted); font-size: 12px; margin-top: 26px; }
+      .foot a { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <img src="${escapeHtml(heroImg)}" alt="${escapeHtml(title)}">
+        <div class="hero-badges">
+          <span class="badge">${escapeHtml(PURPOSE_LABEL[property.purpose] || 'For Sale')}</span>
+          ${property.isVerified ? '<span class="badge green">Verified</span>' : ''}
+        </div>
+      </div>
+
+      <div class="card">
+        <h1>${escapeHtml(title)}</h1>
+        <div class="addr">${escapeHtml([property.address, property.locality, property.city].filter(Boolean).join(', '))}</div>
+        <div class="price">${escapeHtml(priceText)}</div>
+
+        ${facts.length ? `<div class="facts">${facts.map(([label, value]) => `
+          <div><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join('')}
+        </div>` : ''}
+
+        ${property.description ? `<div class="section"><h2>About this property</h2><p>${escapeHtml(property.description)}</p></div>` : ''}
+
+        ${property.amenities?.length ? `<div class="section"><h2>Amenities</h2><div class="amenities">${
+          property.amenities.map((a) => `<span>${escapeHtml(a)}</span>`).join('')
+        }</div></div>` : ''}
+
+        ${gallery.length ? `<div class="section"><h2>Photos</h2><div class="gallery">${
+          gallery.map((img) => `<img src="${escapeHtml(img.url)}" alt="">`).join('')
+        }</div></div>` : ''}
+
+        ${owner.name ? `<div class="contact">
+          <span class="av">${escapeHtml(initial)}</span>
+          <div>
+            <div class="nm">${escapeHtml(owner.companyName || owner.name)}</div>
+            <div class="rl">${escapeHtml(owner.role || 'Owner')}${owner.isVerified ? ' · Verified' : ''}</div>
+          </div>
+        </div>` : ''}
+
+        <a class="cta" href="${escapeHtml(targetUrl)}">View full listing &amp; enquire →</a>
+      </div>
+
+      <div class="foot">Shared via <a href="${escapeHtml(clientOrigin)}">RNI Real Estates</a></div>
+    </div>
+  </body>
+</html>`);
+}));
+
 router.get('/:idOrSlug', optionalAuth, asyncHandler(async (req, res) => {
   const key = req.params.idOrSlug;
   const byId = /^[0-9a-fA-F]{24}$/.test(key);
@@ -141,7 +311,7 @@ router.get('/:idOrSlug', optionalAuth, asyncHandler(async (req, res) => {
   res.json({ data: { ...flattened, images, similar: similarDocs.map(shapeDoc), is_favorite } });
 }));
 
-router.post('/', requireAuth, requireRole('owner', 'agent', 'builder', 'admin'), asyncHandler(async (req, res) => {
+router.post('/', requireAuth, requireRole('owner', 'agent', 'builder', 'admin'), requireApproved, asyncHandler(async (req, res) => {
   const d = z.object({
     title: z.string().min(8, 'Title should be at least 8 characters').max(200),
     description: z.string().max(5000).optional(),

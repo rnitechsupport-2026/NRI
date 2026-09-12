@@ -76,3 +76,18 @@ export const Sparkle = (p) => <Ico {...p}><path d="M12 3.2 13.9 9l5.8 1.9-5.8 1.
 export const Send = (p) => <Ico {...p}><path d="M20.5 3.5 10.8 13.2" /><path d="M20.5 3.5 14.3 20.6l-3.5-7.4-7.4-3.5z" /></Ico>;
 export const Refresh = (p) => <Ico {...p}><path d="M20 11.5a8 8 0 1 1-2.4-5.7" /><path d="M20.3 4v4.4h-4.4" /></Ico>;
 export const Bell = (p) => <Ico {...p}><path d="M18 8.5a6 6 0 0 0-12 0c0 6-2.2 7.5-2.2 7.5h16.4S18 14.5 18 8.5" /><path d="M13.7 20a2 2 0 0 1-3.4 0" /></Ico>;
+
+/* ---- amenity icons ---- */
+export const Elevator = (p) => <Ico {...p}><rect x="5" y="3" width="14" height="18" rx="2" /><path d="m9.5 10.5 2.5-2.5 2.5 2.5" /><path d="m9.5 13.5 2.5 2.5 2.5-2.5" /></Ico>;
+export const Bolt = (p) => <Ico {...p}><path d="M13 2 4 14h6l-1 8 9-12h-6z" /></Ico>;
+export const Car = (p) => <Ico {...p}><path d="M4 16V11.5l2-5.2A2 2 0 0 1 7.8 5h8.4a2 2 0 0 1 1.8 1.3l2 5.2V16" /><path d="M3.5 16h17v2.3a1 1 0 0 1-1 1H18a1 1 0 0 1-1-1V17H7v1.3a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1z" /><circle cx="7.5" cy="13" r="1.1" /><circle cx="16.5" cy="13" r="1.1" /></Ico>;
+export const Dumbbell = (p) => <Ico {...p}><path d="M6.5 9v6M4 10.2v3.6M17.5 9v6M20 10.2v3.6M8.5 12h7" /></Ico>;
+export const Waves = (p) => <Ico {...p}><path d="M2 9c1.5 1.6 3 1.6 4.5 0s3-1.6 4.5 0 3 1.6 4.5 0 3-1.6 4.5 0" /><path d="M2 15c1.5 1.6 3 1.6 4.5 0s3-1.6 4.5 0 3 1.6 4.5 0 3-1.6 4.5 0" /></Ico>;
+export const Ball = (p) => <Ico {...p}><circle cx="12" cy="12" r="9" /><path d="M12 3v18M3 12h18M5.7 5.7c2.8 3 2.8 9.6 0 12.6M18.3 5.7c-2.8 3-2.8 9.6 0 12.6" /></Ico>;
+export const Tree = (p) => <Ico {...p}><path d="M12 3 7.5 10h2.7l-3.7 6h4V21h3v-5h4l-3.7-6h2.7z" /></Ico>;
+export const Flame = (p) => <Ico {...p}><path d="M12 3c1 3-3 4.2-3 7.6a3 3 0 0 0 6 0c0-1-1-1.6-1-2.8 1.8 1 3 3 3 5.2a5 5 0 0 1-10 0c0-4.2 3.2-6.2 5-10Z" /></Ico>;
+export const Droplet = (p) => <Ico {...p}><path d="M12 3s7 7.6 7 12a7 7 0 0 1-14 0c0-4.4 7-12 7-12Z" /></Ico>;
+export const FireSafety = (p) => <Ico {...p}><circle cx="12" cy="12" r="9" /><path d="M12 8c.6 1.6-1.6 2-1.6 3.6a1.6 1.6 0 0 0 3.2 0c0-.6-.5-.8-.5-1.6 1 .5 1.6 1.6 1.6 2.6a2.7 2.7 0 0 1-5.4 0c0-2.2 1.6-3.2 2.7-4.6Z" /></Ico>;
+export const Wifi = (p) => <Ico {...p}><path d="M4 8.5a12 12 0 0 1 16 0" /><path d="M7 12a8 8 0 0 1 10 0" /><path d="M10 15.5a4 4 0 0 1 4 0" /><path d="M12 19h.01" /></Ico>;
+export const Run = (p) => <Ico {...p}><circle cx="14.3" cy="4.7" r="1.6" /><path d="M9 20.5 11 16l2-2-1-4 3 1 2 3.5 3 1" /><path d="M11.5 13.5 8 15.5l-1.7 4.5" /></Ico>;
+export const Dice = (p) => <Ico {...p}><rect x="4" y="4" width="16" height="16" rx="3" /><circle cx="8.5" cy="8.5" r="1.1" fill="currentColor" stroke="none" /><circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none" /><circle cx="8.5" cy="15.5" r="1.1" fill="currentColor" stroke="none" /><circle cx="15.5" cy="15.5" r="1.1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" /></Ico>;

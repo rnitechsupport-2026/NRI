@@ -50,9 +50,13 @@ export function AuthProvider({ children }) {
     user, ready, login, register, logout, updateProfile, setUser,
     isAuthed: !!user,
     /** owner / agent / builder can post properties; builder also posts projects. */
-    canPostProperty: !!user && ['owner', 'agent', 'builder', 'admin'].includes(user.role),
-    canPostProject: !!user && ['builder', 'admin'].includes(user.role),
-    canPostService: !!user && ['service', 'admin'].includes(user.role),
+    canPostProperty: !!user && ['owner', 'agent', 'builder', 'admin'].includes(user.role) && user.approvalStatus !== 'pending',
+    canPostProject: !!user && ['builder', 'admin'].includes(user.role) && user.approvalStatus !== 'pending',
+    canPostService: !!user && ['service', 'admin'].includes(user.role) && user.approvalStatus !== 'pending',
+    isAdmin: !!user && user.role === 'admin',
+    isEmployee: !!user && user.role === 'employee',
+    isPending: !!user && user.approvalStatus === 'pending',
+    managedPortals: (user && user.managedPortals) || [],
   }), [user, ready, login, register, logout, updateProfile]);
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

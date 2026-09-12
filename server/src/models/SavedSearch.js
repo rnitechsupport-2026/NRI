@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const savedSearchSchema = new mongoose.Schema(
   {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     label: { type: String, required: true, trim: true, maxlength: 160 },
     params: { type: mongoose.Schema.Types.Mixed, required: true },
     alerts: { type: Boolean, default: true },

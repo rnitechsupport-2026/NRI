@@ -1,10 +1,18 @@
-import { User, Briefcase, Building, Wrench } from './Icons.jsx';
+import { User, Search, Briefcase, Building, Wrench } from './Icons.jsx';
 
 /**
- * The OWNER / AGENT / BUILDER / SERVICES selector used on the login,
+ * The BUYER / OWNER / AGENT / BUILDER / SERVICES selector used on the login,
  * register and "post property" screens.
  */
 export const ROLES = [
+  {
+    key: 'buyer',
+    label: 'Buyer',
+    icon: Search,
+    title: 'Property Buyer / Renter',
+    blurb: 'Browse verified listings, shortlist your favourites and enquire directly with owners, agents and builders — no middleman.',
+    perks: ['Shortlist your favourites', 'Track every enquiry', 'Personalised recommendations'],
+  },
   {
     key: 'owner',
     label: 'Owner',

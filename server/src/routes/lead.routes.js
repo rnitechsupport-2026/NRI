@@ -115,7 +115,9 @@ router.post('/', optionalAuth, asyncHandler(async (req, res) => {
 }));
 
 router.get('/', requireAuth, asyncHandler(async (req, res) => {
-  const filter = { receiver: req.user._id };
+  // Buyers never receive leads (nothing of theirs is listed) — they send
+  // them. Every other role still sees what was sent to them, as before.
+  const filter = { [req.user.role === 'buyer' ? 'sender' : 'receiver']: req.user._id };
   if (req.query.status) filter.status = req.query.status;
   if (req.query.source) filter.source = req.query.source;
 

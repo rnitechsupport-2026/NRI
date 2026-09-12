@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { z } = require('zod');
 const ServiceOffering = require('../models/ServiceOffering');
 const Lead = require('../models/Lead');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireRole, requireApproved } = require('../middleware/auth');
 const { asyncHandler, makeSlug, nn, paginate, HttpError } = require('../utils/helpers');
 
 router.get('/', asyncHandler(async (req, res) => {
@@ -79,7 +79,7 @@ router.get('/:idOrSlug', asyncHandler(async (req, res) => {
   res.json({ data: { ...service, related } });
 }));
 
-router.post('/', requireAuth, requireRole('service', 'admin'), asyncHandler(async (req, res) => {
+router.post('/', requireAuth, requireRole('service', 'admin'), requireApproved, asyncHandler(async (req, res) => {
   const d = z.object({
     title: z.string().min(5).max(180),
     category: z.string().min(2).max(80),

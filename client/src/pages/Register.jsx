@@ -19,7 +19,7 @@ export default function Register() {
   const { register, isAuthed } = useAuth();
   const toast = useToast();
 
-  const [role, setRole] = useState(params.get('role') || 'owner');
+  const [role, setRole] = useState(params.get('role') || 'buyer');
   const [form, setForm] = useState({
     name: '', email: '', phone: '', password: '', confirm: '',
     company_name: '', rera_id: '', service_category: '', experience_years: '', city: '',
@@ -32,6 +32,7 @@ export default function Register() {
 
   const info = roleInfo(role);
   const isPro = role === 'agent' || role === 'builder' || role === 'service';
+  const needsApplication = role === 'agent' || role === 'builder' || role === 'service';
 
   useEffect(() => { if (isAuthed) nav('/dashboard', { replace: true }); }, [isAuthed, nav]);
 
@@ -118,6 +119,22 @@ export default function Register() {
 
           <RoleTabs value={role} onChange={setRole} className="mb-3" />
 
+          {needsApplication ? (
+            <div className="stack" style={{ gap: 16 }}>
+              <div className="alert alert-info">
+                <span>
+                  {role === 'agent'
+                    ? 'Agent accounts go through KYC and RERA verification before you can post listings — registration is a short multi-step application instead of this quick form.'
+                    : role === 'builder'
+                    ? 'Builder accounts go through company/entity verification before you can post projects — registration is a short multi-step application instead of this quick form. Each project you add afterwards needs its own RERA/land-rights review too.'
+                    : 'Service provider accounts go through identity and qualification verification before you can post listings — what’s checked depends on your profession, so registration is a short multi-step application instead of this quick form.'}
+                </span>
+              </div>
+              <Link to={`/register/${role}`} className="btn btn-primary btn-block btn-lg">
+                Start {role} application <ArrowRight />
+              </Link>
+            </div>
+          ) : (
           <form onSubmit={submit} className="stack">
             {error && <Notice type="err">{error}</Notice>}
 
@@ -229,6 +246,7 @@ export default function Register() {
                     : <>Create {info.label} account <ArrowRight /></>}
             </button>
           </form>
+          )}
 
           <p className="center small muted mt-3">
             Already registered? <Link to={`/login?role=${role}`} className="gold strong">Login here</Link>

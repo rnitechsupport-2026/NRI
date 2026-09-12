@@ -9,14 +9,41 @@ import PropertyBot from '../components/PropertyBot.jsx';
 import Recommendations from '../components/bots/Recommendations.jsx';
 import { Avatar, Crumbs, Notice, PageLoader } from '../components/ui.jsx';
 import {
-  priceLabel, area, rupees, timeAgo, titleCase, PURPOSE_LABEL, TYPE_LABEL, ROLE_LABEL,
+  priceLabel, area, rupees, timeAgo, titleCase, PURPOSE_LABEL, TYPE_LABEL, ROLE_LABEL, shareUrl,
 } from '../utils/format.js';
 import {
   MapPin, Bed, Bath, Ruler, Heart, Shield, Cube, Camera, Eye, ChevronLeft, ChevronRight,
-  Check, Compass, Sofa, Stairs, Clock, Building, Phone, Document, Play, Layers,
+  Check, Compass, Sofa, Stairs, Clock, Building, Phone, Document, Play, Layers, Send,
+  Elevator, Bolt, Car, Dumbbell, Waves, Ball, Tree, Flame, Droplet, FireSafety, Wifi, Run, Dice,
+  Filter,
 } from '../components/Icons.jsx';
 
 const FALLBACK = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80';
+
+// One glyph per amenity from AMENITY_LIST (utils/format.js) — anything outside
+// that fixed list (older freeform data) just falls back to a plain check.
+const AMENITY_ICON = {
+  'Lift': Elevator,
+  'Power Backup': Bolt,
+  'Covered Parking': Car,
+  'Security': Shield,
+  'CCTV': Camera,
+  'Gym': Dumbbell,
+  'Swimming Pool': Waves,
+  "Children's Play Area": Ball,
+  'Clubhouse': Building,
+  'Park': Tree,
+  'Gas Pipeline': Flame,
+  'Rain Water Harvesting': Droplet,
+  'Intercom': Phone,
+  'Fire Safety': FireSafety,
+  'Visitor Parking': Car,
+  'Water Purifier': Filter,
+  'Servant Room': Bed,
+  'Wi-Fi': Wifi,
+  'Jogging Track': Run,
+  'Indoor Games': Dice,
+};
 
 export default function PropertyDetail() {
   const { idOrSlug } = useParams();
@@ -25,13 +52,13 @@ export default function PropertyDetail() {
 
   const [p, setP] = useState(null);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState('photos');
   const [idx, setIdx] = useState(0);
   const [fav, setFav] = useState(false);
+  const [activeMedia, setActiveMedia] = useState(null); // null | 'tour' | 'plan' | 'video'
 
   useEffect(() => {
     let live = true;
-    setP(null); setError(''); setIdx(0); setTab('photos');
+    setP(null); setError(''); setIdx(0); setActiveMedia(null);
     api.get(`/properties/${idOrSlug}`)
       .then((r) => {
         if (!live) return;
@@ -51,6 +78,15 @@ export default function PropertyDetail() {
     } catch { toast.error('Could not update shortlist'); }
   }
 
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl(p));
+      toast.success('Link copied — paste it anywhere, WhatsApp shows the photo & price automatically');
+    } catch {
+      toast.error('Could not copy the link');
+    }
+  }
+
   if (error) {
     return (
       <div className="container section">
@@ -65,8 +101,10 @@ export default function PropertyDetail() {
   const price = priceLabel(p.purpose, p.price);
   const amenities = Array.isArray(p.amenities) ? p.amenities : [];
 
+  const shortListingId = `RNI-${String(p.id).slice(-8).toUpperCase()}`;
+
   const specs = [
-    ['Property type', TYPE_LABEL[p.property_type]],
+    ['Property type', TYPE_LABEL[p.property_type] || titleCase(p.property_type) || '—'],
     ['Configuration', p.bhk ? `${p.bhk} BHK` : '—'],
     ['Bathrooms', p.bathrooms || '—'],
     ['Balconies', p.balconies ?? '—'],
@@ -79,19 +117,20 @@ export default function PropertyDetail() {
     ['Possession', p.possession ? titleCase(p.possession) : '—'],
     ['Maintenance', p.maintenance ? `${rupees(p.maintenance)} / month` : 'Not applicable'],
     ['Pincode', p.pincode || '—'],
-    ['Listing ID', `RNI-${String(p.id).padStart(5, '0')}`],
+    ['Listing ID', shortListingId],
   ];
 
-  const TABS = [
-    { k: 'photos', label: `Photos (${images.length})`, icon: Camera },
+  const otherMedia = [
     ...(p.tour_url ? [{ k: 'tour', label: '3D Walkthrough', icon: Cube }] : []),
     ...(p.floor_plan_url ? [{ k: 'plan', label: 'Floor Plan', icon: Layers }] : []),
     ...(p.video_url ? [{ k: 'video', label: 'Video', icon: Play }] : []),
   ];
 
+  const address = [p.address, p.locality, p.city].filter(Boolean).join(', ');
+
   return (
     <>
-      <div className="pagehead" style={{ padding: '32px 0' }}>
+      <div className="pd-crumbbar">
         <div className="container">
           <Crumbs items={[
             { label: 'Home', to: '/' },
@@ -99,29 +138,6 @@ export default function PropertyDetail() {
             { label: p.city, to: `/properties?city=${encodeURIComponent(p.city)}` },
             { label: p.title },
           ]} />
-          <div className="row-between" style={{ alignItems: 'flex-end' }}>
-            <div>
-              <div className="row mb-1" style={{ gap: 7, flexWrap: 'wrap' }}>
-                <span className="badge badge-gold">{PURPOSE_LABEL[p.purpose]}</span>
-                {!!p.is_verified && <span className="badge badge-green"><Shield style={{ width: 12, height: 12 }} /> Verified</span>}
-                {p.tour_url && <span className="badge badge-navy" style={{ background: '#fff', color: 'var(--navy-800)' }}><Cube style={{ width: 12, height: 12 }} /> 3D Tour</span>}
-              </div>
-              <h1>{p.title}</h1>
-              <p className="row" style={{ gap: 6 }}>
-                <MapPin style={{ width: 16, height: 16, color: 'var(--gold-500)' }} />
-                {p.address ? `${p.address}, ` : ''}{p.locality}, {p.city}
-              </p>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontFamily: 'var(--font-head)', fontSize: '2rem', fontWeight: 800, color: 'var(--gold-500)' }}>
-                {price.main}<span style={{ fontSize: '.9rem', fontWeight: 600 }}>{price.suffix && ` ${price.suffix}`}</span>
-              </div>
-              <div className="small" style={{ color: 'rgba(255,255,255,.7)' }}>
-                {p.built_up_area ? `${rupees(Math.round(p.price / p.built_up_area))} / ${p.area_unit}` : ''}
-                {p.price_negotiable ? ' · Negotiable' : ''}
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -129,76 +145,114 @@ export default function PropertyDetail() {
         <div className="container detail-layout">
           {/* ------------------------------------------------- main */}
           <div className="stack" style={{ gap: 22 }}>
-            {/* media tabs */}
-            <div className="card" style={{ overflow: 'hidden' }}>
-              <div className="tabs" style={{ padding: '0 8px' }}>
-                {TABS.map((t) => {
-                  const Icon = t.icon;
+            {/* photo hero */}
+            <div className="pd-hero">
+              <div className="pd-hero-media">
+                <img src={images[idx]} alt={p.title}
+                     onError={(e) => { e.currentTarget.src = FALLBACK; }} />
+                <div className="pd-hero-scrim" />
+
+                <div className="pd-hero-badges">
+                  <span className="badge badge-gold">{PURPOSE_LABEL[p.purpose]}</span>
+                  {!!p.is_verified && <span className="badge badge-green"><Shield style={{ width: 12, height: 12 }} /> Verified</span>}
+                  {p.tour_url && <span className="badge" style={{ background: '#fff', color: 'var(--navy-800)' }}><Cube style={{ width: 12, height: 12 }} /> 3D Tour</span>}
+                </div>
+
+                <div className="pd-hero-actions">
+                  <div className="row">
+                    <button onClick={copyLink} aria-label="Share this property" title="Share">
+                      <Send style={{ width: 17, height: 17 }} />
+                    </button>
+                    <button onClick={toggleFav} className={fav ? 'on' : ''} aria-label="Shortlist this property" title="Shortlist">
+                      <Heart style={{ width: 18, height: 18, fill: fav ? 'currentColor' : 'none' }} />
+                    </button>
+                  </div>
+                  {images.length > 1 && <span className="pd-hero-count">{idx + 1} / {images.length}</span>}
+                </div>
+
+                {images.length > 1 && (
+                  <>
+                    <button className="gallery-nav prev" aria-label="Previous photo"
+                            onClick={() => setIdx((i) => (i - 1 + images.length) % images.length)}>
+                      <ChevronLeft />
+                    </button>
+                    <button className="gallery-nav next" aria-label="Next photo"
+                            onClick={() => setIdx((i) => (i + 1) % images.length)}>
+                      <ChevronRight />
+                    </button>
+                  </>
+                )}
+
+                <div className="pd-hero-info">
+                  <div>
+                    <h1>{p.title}</h1>
+                    <div className="addr"><MapPin style={{ width: 14, height: 14 }} /> {address}</div>
+                  </div>
+                  <div className="pd-hero-price">
+                    <div className="amt">{price.main}{price.suffix && ` ${price.suffix}`}</div>
+                    <div className="sub">
+                      {p.built_up_area ? `${rupees(Math.round(p.price / p.built_up_area))} / ${p.area_unit}` : ''}
+                      {p.price_negotiable ? ' · Negotiable' : ''}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {images.length > 1 && (
+                <div className="gallery-thumbs" style={{ background: 'var(--navy-900)' }}>
+                  {images.map((src, i) => (
+                    <button key={i} className={i === idx ? 'on' : ''} onClick={() => setIdx(i)}>
+                      <img src={src} alt="" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* trust-at-a-glance */}
+            <div className="pd-meta-strip">
+              <span><Eye style={{ width: 15, height: 15 }} /> {p.views} views</span>
+              <span><Clock style={{ width: 15, height: 15 }} /> Posted {timeAgo(p.created_at)}</span>
+              <span><Document style={{ width: 15, height: 15 }} /> ID {shortListingId}</span>
+            </div>
+
+            {/* 3D tour / floor plan / video — kept as their own sections rather than
+                forced into the photo hero, since TourEmbed carries its own control
+                bar (fullscreen, open-in-new-tab) that doesn't fit an overlay frame */}
+            {otherMedia.length > 0 && (
+              <div className="pd-media-pills">
+                {otherMedia.map((m) => {
+                  const Icon = m.icon;
                   return (
-                    <button key={t.k} className={tab === t.k ? 'on' : ''} onClick={() => setTab(t.k)}>
-                      <span className="row" style={{ gap: 7 }}>
-                        <Icon style={{ width: 15, height: 15 }} /> {t.label}
-                      </span>
+                    <button key={m.k} className={activeMedia === m.k ? 'on' : ''}
+                            onClick={() => setActiveMedia((cur) => (cur === m.k ? null : m.k))}>
+                      <Icon style={{ width: 15, height: 15 }} /> {m.label}
                     </button>
                   );
                 })}
-                <span className="spacer" />
-                <button onClick={toggleFav} className="row" style={{ padding: '12px 16px', gap: 7, fontWeight: 600, fontSize: '.88rem', color: fav ? 'var(--red)' : 'var(--muted)' }}>
-                  <Heart style={{ width: 16, height: 16, fill: fav ? 'currentColor' : 'none' }} />
-                  {fav ? 'Shortlisted' : 'Shortlist'}
-                </button>
               </div>
+            )}
 
-              <div style={{ padding: 8 }}>
-                {tab === 'photos' && (
-                  <div className="gallery">
-                    <div className="gallery-main">
-                      <img src={images[idx]} alt={p.title}
-                           onError={(e) => { e.currentTarget.src = FALLBACK; }} />
-                      {images.length > 1 && (
-                        <>
-                          <button className="gallery-nav prev" aria-label="Previous photo"
-                                  onClick={() => setIdx((i) => (i - 1 + images.length) % images.length)}>
-                            <ChevronLeft />
-                          </button>
-                          <button className="gallery-nav next" aria-label="Next photo"
-                                  onClick={() => setIdx((i) => (i + 1) % images.length)}>
-                            <ChevronRight />
-                          </button>
-                        </>
-                      )}
-                      <span className="gallery-count">{idx + 1} / {images.length}</span>
-                    </div>
-                    {images.length > 1 && (
-                      <div className="gallery-thumbs">
-                        {images.map((src, i) => (
-                          <button key={i} className={i === idx ? 'on' : ''} onClick={() => setIdx(i)}>
-                            <img src={src} alt="" loading="lazy" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {tab === 'tour' && (
-                  <TourEmbed url={p.tour_url} provider={p.tour_provider}
-                             poster={images[0]} title={`3D walkthrough — ${p.title}`} />
-                )}
-
-                {tab === 'plan' && (
-                  <div className="gallery">
-                    <div className="gallery-main" style={{ background: '#fff' }}>
-                      <img src={p.floor_plan_url} alt="Floor plan" style={{ objectFit: 'contain' }} />
-                    </div>
-                  </div>
-                )}
-
-                {tab === 'video' && (
-                  <TourEmbed url={p.video_url} provider="youtube" poster={images[0]} title="Property video" />
-                )}
+            {activeMedia === 'tour' && (
+              <div className="card" style={{ overflow: 'hidden' }}>
+                <TourEmbed url={p.tour_url} provider={p.tour_provider}
+                           poster={images[0]} title={`3D walkthrough — ${p.title}`} />
               </div>
-            </div>
+            )}
+            {activeMedia === 'plan' && (
+              <div className="card" style={{ overflow: 'hidden' }}>
+                <div className="gallery">
+                  <div className="gallery-main" style={{ background: '#fff' }}>
+                    <img src={p.floor_plan_url} alt="Floor plan" style={{ objectFit: 'contain' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeMedia === 'video' && (
+              <div className="card" style={{ overflow: 'hidden' }}>
+                <TourEmbed url={p.video_url} provider="youtube" poster={images[0]} title="Property video" />
+              </div>
+            )}
 
             {/* key facts */}
             <div className="keyfacts">
@@ -212,39 +266,17 @@ export default function PropertyDetail() {
                 { icon: Clock, label: 'Possession', value: p.possession === 'ready-to-move' ? 'Ready' : 'Under const.' },
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label} className="keyfact">
-                  <Icon />
+                  <span className="ic"><Icon /></span>
                   <b>{value}</b>
                   <span>{label}</span>
                 </div>
               ))}
             </div>
 
-            {/* 3D teaser when the tour tab isn't open */}
-            {p.tour_url && tab !== 'tour' && (
-              <button className="card card-p row-between card-hover" onClick={() => setTab('tour')}
-                      style={{ textAlign: 'left', background: 'linear-gradient(120deg, var(--navy-900), var(--navy-700))', border: 'none', color: '#fff' }}>
-                <div className="row" style={{ gap: 16 }}>
-                  <span className="ftile-ic" style={{ background: 'rgba(228,161,27,.18)' }}><Cube /></span>
-                  <div>
-                    <h4 style={{ color: '#fff' }}>Take the 3D walkthrough</h4>
-                    <p className="small" style={{ color: 'rgba(255,255,255,.7)' }}>
-                      Move room to room, look up, look down — exactly like being there.
-                    </p>
-                  </div>
-                </div>
-                <span className="btn btn-primary btn-sm">Launch tour</span>
-              </button>
-            )}
-
             {/* description */}
             <div className="card card-p">
               <h3 className="mb-2">About this property</h3>
               <p style={{ whiteSpace: 'pre-line' }}>{p.description || 'No description provided.'}</p>
-              <div className="row mt-3 small muted" style={{ gap: 20, flexWrap: 'wrap' }}>
-                <span className="row" style={{ gap: 6 }}><Eye style={{ width: 15, height: 15 }} /> {p.views} views</span>
-                <span className="row" style={{ gap: 6 }}><Clock style={{ width: 15, height: 15 }} /> Posted {timeAgo(p.created_at)}</span>
-                <span className="row" style={{ gap: 6 }}><Document style={{ width: 15, height: 15 }} /> ID RNI-{String(p.id).padStart(5, '0')}</span>
-              </div>
             </div>
 
             {/* specs */}
@@ -262,11 +294,14 @@ export default function PropertyDetail() {
               <div className="card card-p">
                 <h3 className="mb-2">Amenities</h3>
                 <div className="amenity-grid">
-                  {amenities.map((a) => (
-                    <div className="amenity" key={a}>
-                      <span className="ic"><Check /></span> {a}
-                    </div>
-                  ))}
+                  {amenities.map((a) => {
+                    const Icon = AMENITY_ICON[a] || Check;
+                    return (
+                      <div className="amenity" key={a}>
+                        <span className="ic"><Icon /></span> {a}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

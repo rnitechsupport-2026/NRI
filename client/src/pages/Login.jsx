@@ -8,6 +8,7 @@ import { Field, Notice } from '../components/ui.jsx';
 import { Mail, Lock, Eye, EyeOff, Shield, Cube, Handshake, ArrowRight } from '../components/Icons.jsx';
 
 const DEMO = {
+  buyer: 'buyer@demo.com',
   owner: 'owner@demo.com',
   agent: 'agent@demo.com',
   builder: 'builder@demo.com',
@@ -23,20 +24,24 @@ const POINTS = [
 export default function Login() {
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const { login, isAuthed } = useAuth();
+  const { login, isAuthed, user } = useAuth();
   const toast = useToast();
 
-  const [role, setRole] = useState(params.get('role') || 'owner');
+  const [role, setRole] = useState(params.get('role') || 'buyer');
+  const [staffMode, setStaffMode] = useState(params.get('staff') === '1');
   const [form, setForm] = useState({ email: '', password: '' });
   const [show, setShow] = useState(false);
   const [error, setError] = useState(params.get('expired') ? 'Your session expired. Please login again.' : '');
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
 
-  const next = params.get('next') || '/dashboard';
+  // Buyers have no dashboard shell — land them on the homepage instead,
+  // unless the caller asked for somewhere specific via ?next=.
+  const explicitNext = params.get('next');
+  const destFor = (u) => explicitNext || (u.role === 'buyer' ? '/' : '/dashboard');
   const info = roleInfo(role);
 
-  useEffect(() => { if (isAuthed) nav(next, { replace: true }); }, [isAuthed, nav, next]);
+  useEffect(() => { if (isAuthed) nav(destFor(user), { replace: true }); }, [isAuthed, user, nav, explicitNext]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -44,9 +49,10 @@ export default function Login() {
     e.preventDefault();
     setBusy(true); setError(''); setErrors({});
     try {
-      const user = await login({ ...form, role });
-      toast.success(`Welcome back, ${user.name.split(' ')[0]}!`);
-      nav(next, { replace: true });
+      const payload = staffMode ? { email: form.email, password: form.password } : { ...form, role };
+      const loggedInUser = await login(payload);
+      toast.success(`Welcome back, ${loggedInUser.name.split(' ')[0]}!`);
+      nav(destFor(loggedInUser), { replace: true });
     } catch (err) {
       setError(errMsg(err));
       setErrors(errFields(err));
@@ -56,8 +62,13 @@ export default function Login() {
   }
 
   function useDemo() {
-    setForm({ email: DEMO[role] || DEMO.owner, password: 'Test@123' });
+    setForm({ email: staffMode ? 'admin@demo.com' : (DEMO[role] || DEMO.owner), password: 'Test@123' });
     setError('');
+  }
+
+  function toggleStaffMode() {
+    setStaffMode((s) => !s);
+    setError(''); setErrors({});
   }
 
   return (
@@ -97,17 +108,43 @@ export default function Login() {
 
       <div className="auth-main">
         <div className="auth-card">
-          <h1>Login to your account</h1>
-          <p className="muted">Choose your account type and continue.</p>
-
-          <RoleTabs value={role} onChange={setRole} className="mb-3" />
-
-          <div className="alert alert-info mb-3" style={{ padding: '10px 14px' }}>
-            <span className="tiny"><b>{info.title}</b> — {info.blurb}</span>
+          <div className="row-between" style={{ alignItems: 'flex-start' }}>
+            <div>
+              <h1>Login to your account</h1>
+              <p className="muted">
+                {staffMode ? 'Sign in with your staff or admin account.' : 'Choose your account type and continue.'}
+              </p>
+            </div>
+            <button type="button" className="small gold strong" onClick={toggleStaffMode} style={{ whiteSpace: 'nowrap' }}>
+              {staffMode ? '← Back to account login' : 'Staff / Admin login'}
+            </button>
           </div>
 
+          {!staffMode && (
+            <>
+              <RoleTabs value={role} onChange={setRole} className="mb-3 mt-3" />
+              <div className="alert alert-info mb-3" style={{ padding: '10px 14px' }}>
+                <span className="tiny"><b>{info.title}</b> — {info.blurb}</span>
+              </div>
+            </>
+          )}
+          {staffMode && <div className="mt-3" />}
+
           <form onSubmit={submit} className="stack">
-            {error && <Notice type="err">{error}</Notice>}
+            {error && (
+              <Notice type="err">
+                {error}
+                {!staffMode && /registered as (admin|employee)/i.test(error) && (
+                  <>
+                    {' '}
+                    <button type="button" className="strong" style={{ textDecoration: 'underline' }}
+                            onClick={toggleStaffMode}>
+                      Switch to Staff / Admin login
+                    </button>
+                  </>
+                )}
+              </Notice>
+            )}
 
             <Field label="Email or mobile number" required error={errors.email}>
               <div className="input-icon">
@@ -139,7 +176,8 @@ export default function Login() {
             </div>
 
             <button className="btn btn-primary btn-block btn-lg" disabled={busy}>
-              {busy ? <><span className="spinner" /> Signing in…</> : <>Login as {info.label} <ArrowRight /></>}
+              {busy ? <><span className="spinner" /> Signing in…</> : staffMode
+                ? <>Login <ArrowRight /></> : <>Login as {info.label} <ArrowRight /></>}
             </button>
           </form>
 
@@ -148,18 +186,21 @@ export default function Login() {
           <div className="demo-box">
             <b>Demo accounts</b>
             <div className="demo-row">
-              <span><code>{DEMO[role]}</code> / <code>Test@123</code></span>
+              <span><code>{staffMode ? 'admin@demo.com' : DEMO[role]}</code> / <code>Test@123</code></span>
               <button className="btn btn-xs btn-dark" onClick={useDemo}>Use</button>
             </div>
-            <p className="tiny" style={{ color: 'var(--gold-700)' }}>
-              Switch the tab above to try the owner, agent, builder or services dashboard.
+            <p className="tiny muted">
+              {staffMode ? 'Platform admin demo login — employee accounts are added by an admin.'
+                         : 'Switch the tab above to try the owner, agent, builder or services dashboard.'}
             </p>
           </div>
 
-          <p className="center small muted mt-3">
-            New to RNI Realestate?{' '}
-            <Link to={`/register?role=${role}`} className="gold strong">Create a free account</Link>
-          </p>
+          {!staffMode && (
+            <p className="center small muted mt-3">
+              New to RNI Realestate?{' '}
+              <Link to={`/register?role=${role}`} className="gold strong">Create a free account</Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

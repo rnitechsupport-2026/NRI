@@ -3,13 +3,13 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { PageLoader } from './ui.jsx';
 
 /** Gate a route behind login, and optionally behind a set of roles. */
-export default function ProtectedRoute({ children, roles }) {
+export default function ProtectedRoute({ children, roles, redirectTo = '/dashboard' }) {
   const { user, ready } = useAuth();
   const loc = useLocation();
 
   if (!ready) return <PageLoader label="Checking your session…" />;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname)}`} replace />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
+  if (roles && !roles.includes(user.role)) return <Navigate to={redirectTo} replace />;
 
   return children;
 }

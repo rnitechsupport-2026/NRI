@@ -1,10 +1,15 @@
 const router = require('express').Router();
 const { z } = require('zod');
+const multer = require('multer');
 const Project = require('../models/Project');
 const ProjectImage = require('../models/ProjectImage');
+const ProjectDocument = require('../models/ProjectDocument');
 const Lead = require('../models/Lead');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
+const { requireAuth, requireRole, requireApproved } = require('../middleware/auth');
 const { asyncHandler, makeSlug, nn, paginate, HttpError } = require('../utils/helpers');
+const { encryptToDisk, decryptFromDisk } = require('../utils/fileCrypto');
 
 router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, offset } = paginate(req.query);
@@ -73,7 +78,7 @@ router.get('/:idOrSlug', asyncHandler(async (req, res) => {
   res.json({ data: { ...project, amenities: project.amenities || [], images, more_from_builder: more } });
 }));
 
-router.post('/', requireAuth, requireRole('builder', 'admin'), asyncHandler(async (req, res) => {
+router.post('/', requireAuth, requireRole('builder', 'admin'), requireApproved, asyncHandler(async (req, res) => {
   const d = z.object({
     name: z.string().min(3).max(200),
     tagline: z.string().max(200).optional(),
@@ -208,6 +213,144 @@ router.delete('/:id', requireAuth, requireRole('builder', 'admin'), asyncHandler
   }
   await Project.findByIdAndDelete(id);
   res.json({ message: 'Project deleted' });
+}));
+
+/* ===================================================== compliance verification
+   RERA / land-rights / approvals for one specific project — separate from the
+   builder's own account-level identity review (see builder.routes.js). Only
+   the owning builder (or admin) can edit these; only an admin can decide them. */
+
+async function ownedProjectOrThrow(req) {
+  const project = await Project.findById(req.params.id);
+  if (!project) throw new HttpError(404, 'Project not found');
+  if (project.builder.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    throw new HttpError(403, 'You can only manage your own projects');
+  }
+  return project;
+}
+
+router.put('/:id/verification-details', requireAuth, requireRole('builder', 'admin'), asyncHandler(async (req, res) => {
+  const project = await ownedProjectOrThrow(req);
+  if (!['not_submitted', 'rejected'].includes(project.verificationStatus)) {
+    throw new HttpError(409, 'Verification is already submitted — contact support to make changes');
+  }
+
+  const d = z.object({
+    rera_promoter_name: z.string().max(200).optional(),
+    survey_numbers: z.array(z.string().max(40)).max(30).optional(),
+    village: z.string().max(120).optional(),
+    taluk: z.string().max(120).optional(),
+    district: z.string().max(120).optional(),
+    land_ownership_type: z.enum(['owned', 'jda_poa']).optional(),
+    landowner_name: z.string().max(200).optional(),
+  }).parse(req.body);
+
+  if (d.rera_promoter_name !== undefined) project.reraPromoterName = nn(d.rera_promoter_name);
+  if (d.survey_numbers !== undefined) project.surveyNumbers = d.survey_numbers;
+  if (d.village !== undefined) project.village = nn(d.village);
+  if (d.taluk !== undefined) project.taluk = nn(d.taluk);
+  if (d.district !== undefined) project.district = nn(d.district);
+  if (d.land_ownership_type !== undefined) project.landOwnershipType = d.land_ownership_type;
+  if (d.landowner_name !== undefined) project.landownerName = nn(d.landowner_name);
+
+  await project.save();
+  res.json({ data: project.toObject() });
+}));
+
+const docUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(file.mimetype)) return cb(null, true);
+    cb(new Error('Only JPG, PNG, WEBP images or PDF documents are allowed'));
+  },
+});
+
+function shapeProjectDocument(doc) {
+  const obj = { ...doc };
+  obj.id = String(obj._id);
+  delete obj._id;
+  delete obj.__v;
+  delete obj.fileKey;
+  delete obj.iv;
+  delete obj.authTag;
+  return obj;
+}
+
+router.post('/:id/documents', requireAuth, requireRole('builder', 'admin'), docUpload.single('file'), asyncHandler(async (req, res) => {
+  const project = await ownedProjectOrThrow(req);
+  if (!req.file) throw new HttpError(400, 'No file uploaded');
+  const d = z.object({
+    type: z.enum(['rera_certificate', 'jda_poa', 'encumbrance_certificate', 'approval_doc', 'other']),
+  }).parse(req.body);
+
+  const { fileKey, iv, authTag } = encryptToDisk(req.file.buffer, req.file.originalname);
+  const doc = await ProjectDocument.create({
+    project: project._id,
+    type: d.type,
+    fileKey, iv, authTag,
+    originalName: req.file.originalname,
+    mimeType: req.file.mimetype,
+    sizeBytes: req.file.size,
+    status: 'submitted',
+  });
+
+  res.status(201).json({ data: shapeProjectDocument(doc.toObject()) });
+}));
+
+router.get('/:id/documents', requireAuth, requireRole('builder', 'admin'), asyncHandler(async (req, res) => {
+  await ownedProjectOrThrow(req);
+  const rows = await ProjectDocument.find({ project: req.params.id }).sort({ createdAt: -1 }).lean();
+  res.json({ data: rows.map(shapeProjectDocument) });
+}));
+
+router.get('/:id/documents/:docId/file', requireAuth, requireRole('builder', 'admin'), asyncHandler(async (req, res) => {
+  await ownedProjectOrThrow(req);
+  const doc = await ProjectDocument.findOne({ _id: req.params.docId, project: req.params.id }).lean();
+  if (!doc) throw new HttpError(404, 'Document not found');
+
+  const buffer = decryptFromDisk(doc.fileKey, doc.iv, doc.authTag);
+  res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${(doc.originalName || 'document').replace(/"/g, '')}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(buffer);
+}));
+
+router.post('/:id/submit-verification', requireAuth, requireRole('builder', 'admin'), asyncHandler(async (req, res) => {
+  const project = await ownedProjectOrThrow(req);
+  if (!['not_submitted', 'rejected'].includes(project.verificationStatus)) {
+    throw new HttpError(409, 'Verification already submitted');
+  }
+  if (!project.reraNo) throw new HttpError(422, 'Add the RERA registration number before submitting');
+  if (!project.reraPromoterName) throw new HttpError(422, 'Add the RERA promoter name before submitting');
+  if (!project.surveyNumbers?.length) throw new HttpError(422, 'Add at least one survey number before submitting');
+  if (!project.village || !project.taluk || !project.district) throw new HttpError(422, 'Add village, taluk and district before submitting');
+  if (!project.landOwnershipType) throw new HttpError(422, 'Specify whether the promoter owns the land or holds a JDA/POA');
+
+  const docs = await ProjectDocument.find({ project: project._id }).select('type').lean();
+  const types = docs.map((d) => d.type);
+  if (!types.includes('rera_certificate')) throw new HttpError(422, 'Upload the RERA registration certificate before submitting');
+  if (project.landOwnershipType === 'jda_poa') {
+    if (!project.landownerName) throw new HttpError(422, 'Add the landowner name for a JDA/POA project');
+    if (!types.includes('jda_poa')) throw new HttpError(422, 'Upload the JDA / POA document before submitting');
+  }
+
+  project.verificationStatus = 'submitted';
+  await project.save();
+
+  const reviewers = await User.find({
+    $or: [{ role: 'admin' }, { role: 'employee', managedPortals: 'builder' }],
+  }).select('_id').lean();
+  for (const r of reviewers) {
+    await Notification.create({
+      user: r._id, kind: 'system',
+      title: `Project submitted for verification: ${project.name}`,
+      body: 'RERA / land-rights / approvals review requested.',
+      link: `/dashboard/admin/projects/${project._id}/verification`,
+    });
+  }
+
+  res.json({ message: 'Submitted for verification', data: { verificationStatus: project.verificationStatus } });
 }));
 
 module.exports = router;
