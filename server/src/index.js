@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 5001;
 // on the https page.
 app.set('trust proxy', 1);
 
-const corsOrigins = [process.env.CLIENT_URL, 'https://rnibotmodel-1.onrender.com', 'http://localhost:5173'].filter(Boolean);
+const corsOrigins = [process.env.CLIENT_URL, 'https://nri-nine.vercel.app', 'http://localhost:5173'].filter(Boolean);
 app.use(cors({ origin: (origin, cb) => {
   if (!origin || corsOrigins.includes(origin)) return cb(null, true);
   return cb(new Error('Not allowed by CORS'));

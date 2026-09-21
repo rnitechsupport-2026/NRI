@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const isProduction = import.meta.env.PROD;
-export const apiBase = import.meta.env.VITE_API_URL || (isProduction ? 'https://rnibotmodel-1.onrender.com/api' : '/api');
+export const apiBase = import.meta.env.VITE_API_URL || (isProduction ? 'https://nri-0iyj.onrender.com/api' : '/api');
 
 const api = axios.create({
   baseURL: apiBase,

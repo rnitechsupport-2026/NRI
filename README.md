@@ -16,7 +16,7 @@ cp .env.example .env          # edit credentials if yours differ
 npm install
 npm run db:reset              # creates the schema and seeds demo data
 
-# 2. API  →  https://rnibotmodel-1.onrender.com
+# 2. API  →  http://localhost:5001  (production: https://nri-0iyj.onrender.com)
 npm run dev
 
 # 3. Client  →  http://localhost:5173   (new terminal)
@@ -25,7 +25,7 @@ npm install
 npm run dev
 ```
 
-Vite proxies `/api` and `/uploads` to `https://rnibotmodel-1.onrender.com`, so no CORS setup is needed in dev.
+Vite proxies `/api` and `/uploads` to `http://localhost:5001`, so no CORS setup is needed in dev.
 
 ### Demo logins — password `Test@123`
 

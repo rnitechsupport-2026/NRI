@@ -125,7 +125,7 @@ function escapeHtml(s) {
 router.get('/share/:idOrSlug', asyncHandler(async (req, res) => {
   const key = req.params.idOrSlug;
   const byId = /^[0-9a-fA-F]{24}$/.test(key);
-  const clientOrigin = (process.env.CLIENT_URL || 'https://rni-botmodel.vercel.app').replace(/\/$/, '');
+  const clientOrigin = (process.env.CLIENT_URL || 'https://nri-nine.vercel.app').replace(/\/$/, '');
 
   const property = await Property.findOne(byId ? { _id: key } : { slug: key })
     .populate({ path: 'user', select: 'name role companyName phone isVerified' })
