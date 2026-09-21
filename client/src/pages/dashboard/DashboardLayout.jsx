@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { Notice } from '../../components/ui.jsx';
 import { ROLE_LABEL } from '../../utils/format.js';
@@ -9,20 +8,13 @@ import DashTopbar from '../../components/dashboard/DashTopbar.jsx';
 
 export default function DashboardLayout() {
   const { user } = useAuth();
-  const [newLeads, setNewLeads] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    api.get('/stats/dashboard')
-      .then((r) => setNewLeads(r.data.data.new_leads || 0))
-      .catch(() => {});
-  }, []);
 
   const isPending = user.approvalStatus === 'pending';
 
   return (
     <div className="appshell">
-      <DashSidebar user={user} newLeads={newLeads} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+      <DashSidebar user={user} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
 
       <div className="appshell-main">
         <DashTopbar onMenuClick={() => setMobileOpen(true)} />

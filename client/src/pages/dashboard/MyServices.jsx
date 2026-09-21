@@ -67,9 +67,9 @@ export default function MyServices() {
                   <td><Stars value={s.rating} /></td>
                   <td><span className={`badge ${s.status === 'active' ? 'badge-green' : 'badge-outline'}`}>{titleCase(s.status)}</span></td>
                   <td>
-                    <Link to="/dashboard/leads" className={`badge ${s.lead_count > 0 ? 'badge-blue' : 'badge-outline'}`}>
+                    <span className={`badge ${s.lead_count > 0 ? 'badge-blue' : 'badge-outline'}`}>
                       <Inbox style={{ width: 12, height: 12 }} /> {s.lead_count}
-                    </Link>
+                    </span>
                   </td>
                   <td>
                     <div className="row" style={{ gap: 6 }}>

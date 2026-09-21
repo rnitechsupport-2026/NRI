@@ -7,7 +7,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { Avatar, Empty, PageLoader } from '../../components/ui.jsx';
 import Recommendations from '../../components/bots/Recommendations.jsx';
-import { money, timeAgo, LEAD_STATUS, ROLE_LABEL } from '../../utils/format.js';
+import { money, LEAD_STATUS, ROLE_LABEL } from '../../utils/format.js';
 import {
   Home, Inbox, Eye, Heart, Building, Wrench, Plus, ArrowRight, Trending, Chart, Shield,
 } from '../../components/Icons.jsx';
@@ -151,7 +151,7 @@ export default function Overview() {
       <div className="card card-p">
         <div className="row-between mb-2">
           <h3>Enquiry pipeline</h3>
-          <Link to="/dashboard/leads" className="btn btn-outline btn-sm">Manage enquiries <ArrowRight /></Link>
+          <span className="tiny muted">Managed centrally by the admin team</span>
         </div>
         {(!d.leads_by_status || d.leads_by_status.length === 0) ? (
           <p className="muted small">No enquiries yet.</p>
@@ -172,41 +172,6 @@ export default function Overview() {
                 </div>
               );
             })}
-          </div>
-        )}
-      </div>
-
-      {/* recent leads */}
-      <div className="card">
-        <div className="row-between card-p" style={{ paddingBottom: 0 }}>
-          <h3>Recent enquiries</h3>
-          <Link to="/dashboard/leads" className="btn btn-xs btn-ghost">View all <ArrowRight /></Link>
-        </div>
-        {(!d.recent_leads || d.recent_leads.length === 0) ? (
-          <div className="card-p"><p className="muted small">No enquiries received yet.</p></div>
-        ) : (
-          <div className="table-wrap card-p">
-            <table className="tbl">
-              <thead>
-                <tr><th>Name</th><th>Interested in</th><th>Phone</th><th>Status</th><th>Received</th></tr>
-              </thead>
-              <tbody>
-                {d.recent_leads.map((l) => {
-                  const meta = LEAD_STATUS[l.status] || { label: l.status, cls: 'badge-outline' };
-                  return (
-                    <tr key={l.id}>
-                      <td><span className="nm">{l.name}</span></td>
-                      <td className="muted small clamp-2" style={{ maxWidth: 260 }}>
-                        {l.property_title || l.project_name || l.service_title || 'General enquiry'}
-                      </td>
-                      <td><a href={`tel:${l.phone}`} className="strong small">{l.phone}</a></td>
-                      <td><span className={`badge ${meta.cls}`}>{meta.label}</span></td>
-                      <td className="muted small nowrap">{timeAgo(l.created_at)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
         )}
       </div>

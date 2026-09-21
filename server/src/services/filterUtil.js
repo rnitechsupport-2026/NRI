@@ -1,6 +1,10 @@
+const mongoose = require('mongoose');
 const Property = require('../models/Property');
+const User = require('../models/User');
 
-function buildFilterFromParams(q = {}) {
+const POSTED_BY_ROLES = ['owner', 'agent', 'builder', 'service'];
+
+async function buildFilterFromParams(q = {}) {
   const filter = { status: 'active' };
 
   if (q.purpose) filter.purpose = q.purpose;
@@ -19,8 +23,11 @@ function buildFilterFromParams(q = {}) {
   if (q.minArea) filter.builtUpArea = { $gte: Number(q.minArea) };
   if (q.furnishing) filter.furnishing = q.furnishing;
   if (q.possession) filter.possession = q.possession;
-  if (q.postedBy) filter.user = q.postedBy; // handled in route via populate
-  if (q.owner) filter.user = q.owner;
+  if (q.postedBy && POSTED_BY_ROLES.includes(q.postedBy)) {
+    const posters = await User.find({ role: q.postedBy }).select('_id').lean();
+    filter.user = { $in: posters.map((u) => u._id) };
+  }
+  if (q.owner && mongoose.Types.ObjectId.isValid(q.owner)) filter.user = q.owner;
   if (q.featured === 'true' || q.featured === true) filter.isFeatured = true;
   if (q.verified === 'true' || q.verified === true) filter.isVerified = true;
   if (q.hasTour === 'true' || q.hasTour === true) filter.tourUrl = { $ne: null, $exists: true };

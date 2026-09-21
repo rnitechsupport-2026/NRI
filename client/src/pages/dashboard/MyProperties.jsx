@@ -125,9 +125,9 @@ export default function MyProperties() {
                     </td>
                     <td><span className="row" style={{ gap: 5 }}><Eye style={{ width: 14, height: 14, color: 'var(--muted)' }} /> {p.views}</span></td>
                     <td>
-                      <Link to="/dashboard/leads" className={`badge ${p.lead_count > 0 ? 'badge-blue' : 'badge-outline'}`}>
+                      <span className={`badge ${p.lead_count > 0 ? 'badge-blue' : 'badge-outline'}`}>
                         <Inbox style={{ width: 12, height: 12 }} /> {p.lead_count}
-                      </Link>
+                      </span>
                     </td>
                     <td className="muted small nowrap">{timeAgo(p.created_at)}</td>
                     <td>

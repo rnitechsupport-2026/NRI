@@ -13,12 +13,14 @@ import { useAuth } from '../context/AuthContext.jsx';
 import {
   Shield, Handshake, Key, Cube, ArrowRight, Check, Star, Award, Users, Building,
 } from '../components/Icons.jsx';
+import coimbatoreImg from '../../assets/coimbatore.jpg';
+import hyderabadImg from '../../assets/hydrebad.jpg';
 
 const CITY_TILES = [
   { name: 'Chennai', img: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=700&q=80' },
   { name: 'Bengaluru', img: 'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=700&q=80' },
-  { name: 'Coimbatore', img: 'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=700&q=80' },
-  { name: 'Hyderabad', img: 'https://images.unsplash.com/photo-1600100397608-f010cd1b1a5b?auto=format&fit=crop&w=700&q=80' },
+  { name: 'Coimbatore', img: coimbatoreImg },
+  { name: 'Hyderabad', img: hyderabadImg },
 ];
 
 const WHY = [

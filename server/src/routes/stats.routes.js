@@ -58,20 +58,15 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req, res) => {
     data.services = await ServiceOffering.countDocuments({ user: uid });
   }
 
-  // These five are all independent of each other — only leadCounts below
+  // These four are all independent of each other — only leadCounts below
   // actually depends on topListings, so it's the one query left sequential.
-  const [leadsByStatus, recentLeads, topListings, trend, weekRaw] = await Promise.all([
+  // No name/phone-bearing lead list here — enquiries are managed centrally
+  // now (see admin.routes.js), so listers only get aggregate counts.
+  const [leadsByStatus, topListings, trend, weekRaw] = await Promise.all([
     Lead.aggregate([
       { $match: { receiver: uid } },
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]),
-    Lead.find({ receiver: uid })
-      .populate('property', 'title slug coverImage')
-      .populate('project', 'name slug')
-      .populate('service', 'title')
-      .sort({ createdAt: -1 })
-      .limit(6)
-      .lean(),
     Property.find({ user: uid })
       .sort({ views: -1 })
       .limit(5)
@@ -111,26 +106,15 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req, res) => {
   const weekMap = Object.fromEntries(weekRaw.map((w) => [w._id, w.count]));
   const trendWeek = DAY_LABEL.map((day, i) => ({ day, count: weekMap[i + 1] || 0 }));
 
-  // Populated refs (property/project/service) land nested — flatten to the
-  // shape the client actually reads, and shape `id` since these are `.lean()`.
-  const shapeLead = (l) => ({
-    id: String(l._id),
-    name: l.name,
-    phone: l.phone,
-    status: l.status,
-    property_title: l.property?.title,
-    property_slug: l.property?.slug,
-    project_name: l.project?.name,
-    service_title: l.service?.title,
-    created_at: l.createdAt,
-  });
-
   res.json({
     data: {
       ...data,
       leads_by_status: leadsByStatus.map((s) => ({ status: s._id, count: s.count })),
-      recent_leads: recentLeads.map(shapeLead),
-      top_listings: topListings.map((p) => ({ ...p, lead_count: leadCountMap[String(p._id)] || 0 })),
+      top_listings: topListings.map((p) => ({
+        ...p,
+        cover_image: p.coverImage,
+        lead_count: leadCountMap[String(p._id)] || 0,
+      })),
       trend: trend.map((t) => ({ month: t._id, count: t.count })),
       trend_week: trendWeek,
       leads_trend_pct: leadsTrendPct,

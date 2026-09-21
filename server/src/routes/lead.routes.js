@@ -101,13 +101,16 @@ router.post('/', optionalAuth, asyncHandler(async (req, res) => {
     source,
   });
 
-  const scored = await leadEngine.processLead(lead._id.toString());
+  await leadEngine.processLead(lead._id.toString());
+  // Enquiries are managed centrally now — the lister gets a heads-up, not
+  // the enquirer's details or a page to act on. Only Admin/Employee (via
+  // /admin/leads) see who this is and can work the lead.
   await notify.notify({
     user_id: receiver_id,
     kind: 'system',
-    title: `New ${scored?.temperature || ''} enquiry from ${d.name}`.replace('  ', ' '),
-    body: d.message ? String(d.message).slice(0, 160) : 'New enquiry received',
-    link: '/dashboard/leads',
+    title: 'New enquiry on your listing',
+    body: 'Our team is reviewing it.',
+    link: null,
     property: d.property_id ? new mongoose.Types.ObjectId(d.property_id) : null,
   });
 
@@ -115,9 +118,12 @@ router.post('/', optionalAuth, asyncHandler(async (req, res) => {
 }));
 
 router.get('/', requireAuth, asyncHandler(async (req, res) => {
-  // Buyers never receive leads (nothing of theirs is listed) — they send
-  // them. Every other role still sees what was sent to them, as before.
-  const filter = { [req.user.role === 'buyer' ? 'sender' : 'receiver']: req.user._id };
+  // Buyers see what they've sent — that's their own outbox, unaffected by
+  // centralization. Everyone else no longer gets a receiver-side view here;
+  // enquiries are managed centrally via /admin/leads instead.
+  if (req.user.role !== 'buyer') throw new HttpError(403, 'Enquiries are managed centrally — check the admin panel.');
+
+  const filter = { sender: req.user._id };
   if (req.query.status) filter.status = req.query.status;
   if (req.query.source) filter.source = req.query.source;
 
@@ -130,27 +136,6 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
     .lean();
 
   res.json({ data: rows.map(shapeLead) });
-}));
-
-router.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
-  const { status } = z.object({
-    status: z.enum(['new', 'contacted', 'visit-scheduled', 'closed', 'lost']),
-  }).parse(req.body);
-
-  const lead = await Lead.findById(req.params.id).select('receiver').lean();
-  if (!lead) throw new HttpError(404, 'Lead not found');
-  if (lead.receiver.toString() !== req.user._id.toString() && req.user.role !== 'admin') throw new HttpError(403, 'Not allowed');
-
-  await Lead.findByIdAndUpdate(req.params.id, { status });
-  res.json({ message: 'Lead updated' });
-}));
-
-router.delete('/:id', requireAuth, asyncHandler(async (req, res) => {
-  const lead = await Lead.findById(req.params.id).select('receiver').lean();
-  if (!lead) throw new HttpError(404, 'Lead not found');
-  if (lead.receiver.toString() !== req.user._id.toString() && req.user.role !== 'admin') throw new HttpError(403, 'Not allowed');
-  await Lead.findByIdAndDelete(req.params.id);
-  res.json({ message: 'Lead deleted' });
 }));
 
 module.exports = router;

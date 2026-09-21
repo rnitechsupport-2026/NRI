@@ -12,6 +12,13 @@ const { initializeDatabase } = require('./db/init');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Render (and most PaaS hosts) terminate TLS at a proxy in front of us, so the
+// request that reaches Express is always plain HTTP even when the site is
+// https. Without this, req.protocol reports "http" and any URL we build from
+// it (e.g. uploaded image URLs) gets blocked by the browser as mixed content
+// on the https page.
+app.set('trust proxy', 1);
+
 const corsOrigins = [process.env.CLIENT_URL, 'https://rnibotmodel-1.onrender.com', 'http://localhost:5173'].filter(Boolean);
 app.use(cors({ origin: (origin, cb) => {
   if (!origin || corsOrigins.includes(origin)) return cb(null, true);

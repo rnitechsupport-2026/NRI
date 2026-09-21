@@ -256,7 +256,7 @@ async function runNewListingBot({ dryRun = false } = {}) {
   const hits = [];
   for (const s of searches) {
     const params = typeof s.params === 'string' ? JSON.parse(s.params) : s.params;
-    const { filter } = buildFilterFromParams(params);
+    const { filter } = await buildFilterFromParams(params);
     filter.createdAt = { $gt: s.lastRunAt || s.createdAt };
 
     const rows = await Property.find(filter).populate('user', 'name').sort({ createdAt: -1 }).limit(10).lean();

@@ -58,7 +58,9 @@ export default function AdminProjectVerification() {
           <p className="muted small mt-1">{project.locality}, {project.city}</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <span className={`badge ${STATUS_CLS[project.verificationStatus]}`}>{project.verificationStatus.replace('_', ' ')}</span>
+          <span className={`badge ${STATUS_CLS[project.verificationStatus] || 'badge-outline'}`}>
+            {(project.verificationStatus || 'not_submitted').replace('_', ' ')}
+          </span>
         </div>
       </div>
 
@@ -89,7 +91,9 @@ export default function AdminProjectVerification() {
         <div className="card card-p">
           <div className="row-between mb-2">
             <b className="small">Verification decision</b>
-            <span className={`badge ${STATUS_CLS[project.verificationStatus]}`}>{project.verificationStatus.replace('_', ' ')}</span>
+            <span className={`badge ${STATUS_CLS[project.verificationStatus] || 'badge-outline'}`}>
+            {(project.verificationStatus || 'not_submitted').replace('_', ' ')}
+          </span>
           </div>
           <p className="tiny muted mb-2">Cross-check the RERA promoter name, survey numbers, and documents below before verifying this project.</p>
           <div className="row" style={{ gap: 8 }}>

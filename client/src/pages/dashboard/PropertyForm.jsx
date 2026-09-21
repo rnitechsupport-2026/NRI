@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api, { errMsg, errFields } from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import ImagePicker from '../../components/ImagePicker.jsx';
@@ -24,11 +24,27 @@ const LAND_TYPES = ['plot', 'warehouse'];
 
 export default function PropertyForm() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const nav = useNavigate();
   const toast = useToast();
   const editing = !!id;
 
-  const [f, setF] = useState(BLANK);
+  // Carried over from the owner registration wizard's "what are you listing?"
+  // step — only applied to a brand-new listing, never while editing.
+  const [f, setF] = useState(() => {
+    if (editing) return BLANK;
+    const purpose = searchParams.get('purpose');
+    const propertyType = searchParams.get('type');
+    const city = searchParams.get('city');
+    const locality = searchParams.get('locality');
+    return {
+      ...BLANK,
+      ...(purpose && PURPOSE_LABEL[purpose] ? { purpose } : {}),
+      ...(propertyType && TYPE_LABEL[propertyType] ? { property_type: propertyType } : {}),
+      ...(city ? { city } : {}),
+      ...(locality ? { locality } : {}),
+    };
+  });
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(editing);

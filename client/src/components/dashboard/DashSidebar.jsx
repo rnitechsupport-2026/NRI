@@ -6,7 +6,7 @@ import {
   Chart, Users, Document, Clock, ChevronDown, X,
 } from '../Icons.jsx';
 
-export default function DashSidebar({ user, newLeads, mobileOpen, onClose }) {
+export default function DashSidebar({ user, mobileOpen, onClose }) {
   const [adminOpen, setAdminOpen] = useState(true);
 
   const isPending = user.approvalStatus === 'pending';
@@ -35,7 +35,6 @@ export default function DashSidebar({ user, newLeads, mobileOpen, onClose }) {
       { to: '/dashboard/services', label: 'My Services', icon: Wrench },
       { to: '/dashboard/service/new', label: 'Add Service', icon: Plus, locked: isPending },
     ] : []),
-    { to: '/dashboard/leads', label: 'Enquiries', icon: Inbox, count: newLeads },
     { to: '/dashboard/visits', label: 'Site Visits', icon: Calendar },
     { to: '/dashboard/favorites', label: 'Shortlist', icon: Heart },
   ];

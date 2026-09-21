@@ -11,6 +11,9 @@ import Home from './pages/Home.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 
+const RegisterOwner = lazy(() => import('./pages/RegisterOwner.jsx'));
+const RegisterBuyer = lazy(() => import('./pages/RegisterBuyer.jsx'));
+
 const RegisterAgent = lazy(() => import('./pages/RegisterAgent.jsx'));
 const AgentVerification = lazy(() => import('./pages/dashboard/AgentVerification.jsx'));
 const AdminAgentApplications = lazy(() => import('./pages/dashboard/admin/AdminAgentApplications.jsx'));
@@ -30,6 +33,7 @@ const AdminServiceProviderDetail = lazy(() => import('./pages/dashboard/admin/Ad
 
 const Properties = lazy(() => import('./pages/Properties.jsx'));
 const PropertyDetail = lazy(() => import('./pages/PropertyDetail.jsx'));
+const PropertyMicrosite = lazy(() => import('./microsite/PropertyMicrosite.jsx'));
 const Projects = lazy(() => import('./pages/Projects.jsx'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail.jsx'));
 const People = lazy(() => import('./pages/People.jsx'));
@@ -48,7 +52,6 @@ const MyProjects = lazy(() => import('./pages/dashboard/MyProjects.jsx'));
 const ProjectForm = lazy(() => import('./pages/dashboard/ProjectForm.jsx'));
 const MyServices = lazy(() => import('./pages/dashboard/MyServices.jsx'));
 const ServiceForm = lazy(() => import('./pages/dashboard/ServiceForm.jsx'));
-const Leads = lazy(() => import('./pages/dashboard/Leads.jsx'));
 const Visits = lazy(() => import('./pages/dashboard/Visits.jsx'));
 const Favorites = lazy(() => import('./pages/dashboard/Favorites.jsx'));
 const Profile = lazy(() => import('./pages/dashboard/Profile.jsx'));
@@ -65,24 +68,35 @@ const AdminLeads = lazy(() => import('./pages/dashboard/admin/AdminLeads.jsx'));
 export default function App() {
   // The dashboard is its own app shell (fixed sidebar + topbar) — the
   // marketing site's navbar/footer would just stack a second header above it.
-  const isDashboard = useLocation().pathname.startsWith('/dashboard');
+  const pathname = useLocation().pathname;
+  const isDashboard = pathname.startsWith('/dashboard');
+  // The microsite is a full-bleed experience with its own sticky nav — the
+  // marketing site's Navbar/Footer would double up on chrome.
+  const isMicrosite = pathname === '/property-microsite';
 
   return (
     <>
       <ScrollToTop />
-      {!isDashboard && <Navbar />}
+      {!isDashboard && !isMicrosite && <Navbar />}
       <main>
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/register/owner" element={<RegisterOwner />} />
+            <Route path="/register/buyer" element={<RegisterBuyer />} />
             <Route path="/register/agent" element={<RegisterAgent />} />
             <Route path="/register/builder" element={<RegisterBuilder />} />
             <Route path="/register/service" element={<RegisterService />} />
 
             <Route path="/properties" element={<Properties />} />
             <Route path="/property/:idOrSlug" element={<PropertyDetail />} />
+            {/* Cinematic microsite concept — currently static demo data
+                (see src/microsite/data/property.js), not wired to a real
+                listing yet. Kept as its own route so it doesn't collide
+                with the real, data-driven property detail page above. */}
+            <Route path="/property-microsite" element={<PropertyMicrosite />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/project/:idOrSlug" element={<ProjectDetail />} />
 
@@ -130,7 +144,6 @@ export default function App() {
                 <ProtectedRoute roles={['service', 'admin']}><RequireApproved><ServiceForm /></RequireApproved></ProtectedRoute>} />
               <Route path="service/:id/edit" element={
                 <ProtectedRoute roles={['service', 'admin']}><RequireApproved><ServiceForm /></RequireApproved></ProtectedRoute>} />
-              <Route path="leads" element={<Leads />} />
               <Route path="visits" element={<Visits />} />
               <Route path="favorites" element={<Favorites />} />
               <Route path="profile" element={<Profile />} />
@@ -177,7 +190,7 @@ export default function App() {
           </Routes>
         </Suspense>
       </main>
-      {!isDashboard && <Footer />}
+      {!isDashboard && !isMicrosite && <Footer />}
     </>
   );
 }

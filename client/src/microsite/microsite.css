@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Scoped to the microsite only — the rest of the app keeps its own reset
+   from styles/globals.css, so we re-establish a sane box-sizing baseline
+   here instead of relying on Tailwind's (disabled) preflight. */
+.ms-root, .ms-root *, .ms-root *::before, .ms-root *::after {
+  box-sizing: border-box;
+}
+.ms-root {
+  font-family: 'Inter', sans-serif;
+  color: #111111;
+  background: #F5F2EC;
+  -webkit-font-smoothing: antialiased;
+}
+.ms-root h1, .ms-root h2, .ms-root h3, .ms-root h4, .ms-root p, .ms-root ul {
+  margin: 0;
+  padding: 0;
+}
+.ms-root ul { list-style: none; }
+.ms-root button { font: inherit; cursor: pointer; }
+.ms-root img { max-width: 100%; display: block; }
+
+.ms-serif { font-family: 'Playfair Display', serif; }
+
+/* thin gold scrollbar accents used inside horizontal scroll sections */
+.ms-scrollbar::-webkit-scrollbar { height: 4px; }
+.ms-scrollbar::-webkit-scrollbar-thumb { background: #B89B5E; border-radius: 4px; }
+.ms-scrollbar::-webkit-scrollbar-track { background: transparent; }

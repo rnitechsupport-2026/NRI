@@ -98,7 +98,6 @@ export default function Navbar() {
                     ) : (
                       <>
                         <Link to="/dashboard"><Dashboard /> Dashboard</Link>
-                        <Link to="/dashboard/leads"><Inbox /> My Enquiries</Link>
                         <Link to="/dashboard/favorites"><Heart /> Shortlist</Link>
                         <Link to={`/profile/${user.id}`}><User /> Public Profile</Link>
                         <Link to="/dashboard/profile"><Settings /> Account Settings</Link>
@@ -145,7 +144,6 @@ export default function Navbar() {
                   </Link>
                 )}
                 <NavLink to="/dashboard">Dashboard</NavLink>
-                <NavLink to="/dashboard/leads">My Enquiries</NavLink>
                 <NavLink to="/dashboard/favorites">Shortlist</NavLink>
                 <button className="btn btn-outline btn-block mt-2" onClick={doLogout}>Log out</button>
               </>

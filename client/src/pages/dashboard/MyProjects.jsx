@@ -75,9 +75,9 @@ export default function MyProjects() {
                   <td className="small muted nowrap">{p.possession_on ? shortDate(p.possession_on) : '—'}</td>
                   <td>{p.views}</td>
                   <td>
-                    <Link to="/dashboard/leads" className={`badge ${p.lead_count > 0 ? 'badge-blue' : 'badge-outline'}`}>
+                    <span className={`badge ${p.lead_count > 0 ? 'badge-blue' : 'badge-outline'}`}>
                       <Inbox style={{ width: 12, height: 12 }} /> {p.lead_count}
-                    </Link>
+                    </span>
                   </td>
                   <td>
                     <div className="row" style={{ gap: 6 }}>

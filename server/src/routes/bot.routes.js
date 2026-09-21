@@ -84,11 +84,13 @@ router.post('/qualify', optionalAuth, asyncHandler(async (req, res) => {
 
   const scored = await leadEngine.processLead(lead._id.toString());
 
+  // Enquiries are managed centrally now — no name/detail to the lister,
+  // no page to act on. Only Admin/Employee (via /admin/leads) see the rest.
   await notify.notify({
     user_id: receiver_id, kind: 'system',
-    title: `New ${scored?.temperature || ''} lead: ${d.name}`,
-    body: summary || 'New enquiry received',
-    link: '/dashboard/leads', property: d.property_id ? new mongoose.Types.ObjectId(d.property_id) : null,
+    title: 'New enquiry on your listing',
+    body: 'Our team is reviewing it.',
+    link: null, property: d.property_id ? new mongoose.Types.ObjectId(d.property_id) : null,
   });
 
   const leadRow = await Lead.findById(lead._id).lean();

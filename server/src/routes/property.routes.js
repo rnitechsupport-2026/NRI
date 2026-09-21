@@ -41,7 +41,7 @@ function shapeDoc(doc) {
 router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, offset } = paginate(req.query);
   const q = req.query;
-  const { filter, sort } = buildFilter(q);
+  const { filter, sort } = await buildFilter(q);
   const orderBy = SORTS[q.sort] || { isFeatured: -1, createdAt: -1 };
 
   const [items, total] = await Promise.all([
@@ -632,7 +632,7 @@ router.post('/search-assistant', botLimiter, asyncHandler(async (req, res) => {
   const understood = !searchBot.isEmpty(filters);
   const effective = understood ? params : { q: text };
 
-  const { filter, sort } = buildFilter(effective);
+  const { filter, sort } = await buildFilter(effective);
   const orderBy = /\bcheap|affordable|budget|lowest\b/i.test(text) && !filters.maxPrice
     ? { price: 1 }
     : { isFeatured: -1, price: 1 };

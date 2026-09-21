@@ -452,8 +452,9 @@ router.delete('/services/:id', asyncHandler(async (req, res) => {
 }));
 
 /* ==================================================================== leads */
-/* Read-only oversight — no write actions here, only the receiving agent/
-   owner/builder/service partner acts on their own leads. */
+/* Enquiries are managed centrally here — Admin/Employee (per their assigned
+   portals) see every lead, change its status, and assign it to a specific
+   lister. Listers themselves never see this directly (see lead.routes.js). */
 
 router.get('/leads', asyncHandler(async (req, res) => {
   const scope = resolvePortalScope(req, req.query.portal);
@@ -467,6 +468,7 @@ router.get('/leads', asyncHandler(async (req, res) => {
       .populate('project', 'name slug')
       .populate('service', 'title')
       .populate('receiver', 'name role companyName')
+      .populate('assignedTo', 'name role')
       .sort({ createdAt: -1 }).skip(offset).limit(limit).lean(),
     Lead.countDocuments(filter),
   ]);
@@ -482,12 +484,54 @@ router.get('/leads', asyncHandler(async (req, res) => {
       score: l.score,
       source: l.source,
       createdAt: l.createdAt,
+      receiverId: l.receiver ? String(l.receiver._id) : null,
       receiverName: l.receiver?.name,
       receiverRole: l.receiver?.role,
+      assignedTo: l.assignedTo ? String(l.assignedTo._id) : null,
+      assignedToName: l.assignedTo?.name || null,
       about: l.property?.title || l.project?.name || l.service?.title || null,
     })),
     meta: { page, limit, total },
   });
+}));
+
+router.patch('/leads/:id', asyncHandler(async (req, res) => {
+  const d = z.object({
+    status: z.enum(['new', 'contacted', 'visit-scheduled', 'closed', 'lost']).optional(),
+    assigned_to: z.string().nullable().optional(),
+  }).parse(req.body);
+  if (d.status === undefined && d.assigned_to === undefined) throw new HttpError(400, 'Nothing to update');
+
+  const lead = await Lead.findById(req.params.id).select('receiver status assignedTo').lean();
+  if (!lead) throw new HttpError(404, 'Lead not found');
+  const receiver = await User.findById(lead.receiver).select('role').lean();
+  if (!receiver) throw new HttpError(404, 'Receiving user not found');
+  resolvePortalScope(req, receiver.role);
+
+  const patch = {};
+  if (d.status !== undefined) patch.status = d.status;
+
+  let assignee = null;
+  if (d.assigned_to !== undefined) {
+    if (d.assigned_to === null) {
+      patch.assignedTo = null;
+    } else {
+      assignee = await User.findById(d.assigned_to).select('role name').lean();
+      if (!assignee) throw new HttpError(404, 'Assignee not found');
+      resolvePortalScope(req, assignee.role);
+      patch.assignedTo = d.assigned_to;
+    }
+  }
+
+  await Lead.findByIdAndUpdate(req.params.id, patch);
+  await writeAudit(req, {
+    targetUser: lead.receiver,
+    action: d.assigned_to !== undefined ? 'lead_assign' : 'lead_status',
+    previousStatus: d.status !== undefined ? lead.status : (lead.assignedTo ? String(lead.assignedTo) : 'unassigned'),
+    newStatus: d.status !== undefined ? d.status : (assignee ? assignee.name : 'unassigned'),
+    reason: `lead ${req.params.id}`,
+  });
+  res.json({ message: 'Enquiry updated' });
 }));
 
 /* ======================================================= agent verification */
