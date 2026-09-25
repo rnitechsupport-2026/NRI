@@ -34,6 +34,7 @@ const AdminServiceProviderDetail = lazy(() => import('./pages/dashboard/admin/Ad
 const Properties = lazy(() => import('./pages/Properties.jsx'));
 const PropertyDetail = lazy(() => import('./pages/PropertyDetail.jsx'));
 const PropertyMicrosite = lazy(() => import('./microsite/PropertyMicrosite.jsx'));
+const PublicMicrosite = lazy(() => import('./pages/PublicMicrosite.jsx'));
 const Projects = lazy(() => import('./pages/Projects.jsx'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail.jsx'));
 const People = lazy(() => import('./pages/People.jsx'));
@@ -48,6 +49,9 @@ const DashboardLayout = lazy(() => import('./pages/dashboard/DashboardLayout.jsx
 const Overview = lazy(() => import('./pages/dashboard/Overview.jsx'));
 const MyProperties = lazy(() => import('./pages/dashboard/MyProperties.jsx'));
 const PropertyForm = lazy(() => import('./pages/dashboard/PropertyForm.jsx'));
+const MyMicrosites = lazy(() => import('./pages/dashboard/MyMicrosites.jsx'));
+const ChooseTemplate = lazy(() => import('./pages/dashboard/microsite/ChooseTemplate.jsx'));
+const MicrositeBuilder = lazy(() => import('./pages/dashboard/microsite/MicrositeBuilder.jsx'));
 const MyProjects = lazy(() => import('./pages/dashboard/MyProjects.jsx'));
 const ProjectForm = lazy(() => import('./pages/dashboard/ProjectForm.jsx'));
 const MyServices = lazy(() => import('./pages/dashboard/MyServices.jsx'));
@@ -64,6 +68,7 @@ const AdminProperties = lazy(() => import('./pages/dashboard/admin/AdminProperti
 const AdminProjects = lazy(() => import('./pages/dashboard/admin/AdminProjects.jsx'));
 const AdminServices = lazy(() => import('./pages/dashboard/admin/AdminServices.jsx'));
 const AdminLeads = lazy(() => import('./pages/dashboard/admin/AdminLeads.jsx'));
+const AdminMicrosites = lazy(() => import('./pages/dashboard/admin/AdminMicrosites.jsx'));
 
 export default function App() {
   // The dashboard is its own app shell (fixed sidebar + topbar) — the
@@ -72,7 +77,7 @@ export default function App() {
   const isDashboard = pathname.startsWith('/dashboard');
   // The microsite is a full-bleed experience with its own sticky nav — the
   // marketing site's Navbar/Footer would double up on chrome.
-  const isMicrosite = pathname === '/property-microsite';
+  const isMicrosite = pathname === '/property-microsite' || pathname.startsWith('/site/');
 
   return (
     <>
@@ -97,6 +102,7 @@ export default function App() {
                 listing yet. Kept as its own route so it doesn't collide
                 with the real, data-driven property detail page above. */}
             <Route path="/property-microsite" element={<PropertyMicrosite />} />
+            <Route path="/site/:slug" element={<PublicMicrosite />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/project/:idOrSlug" element={<ProjectDetail />} />
 
@@ -132,6 +138,9 @@ export default function App() {
               <Route path="properties" element={<MyProperties />} />
               <Route path="property/new" element={<RequireApproved><PropertyForm /></RequireApproved>} />
               <Route path="property/:id/edit" element={<RequireApproved><PropertyForm /></RequireApproved>} />
+              <Route path="microsites" element={<MyMicrosites />} />
+              <Route path="microsites/new" element={<RequireApproved><ChooseTemplate /></RequireApproved>} />
+              <Route path="microsites/:id/build" element={<RequireApproved><MicrositeBuilder /></RequireApproved>} />
               <Route path="projects" element={
                 <ProtectedRoute roles={['builder', 'admin']}><MyProjects /></ProtectedRoute>} />
               <Route path="project/new" element={
@@ -168,6 +177,8 @@ export default function App() {
                 <ProtectedRoute roles={['admin', 'employee']}><AdminServices /></ProtectedRoute>} />
               <Route path="admin/leads" element={
                 <ProtectedRoute roles={['admin', 'employee']}><AdminLeads /></ProtectedRoute>} />
+              <Route path="admin/microsites" element={
+                <ProtectedRoute roles={['admin', 'employee']}><AdminMicrosites /></ProtectedRoute>} />
               <Route path="admin/agents" element={
                 <ProtectedRoute roles={['admin', 'employee']}><AdminAgentApplications /></ProtectedRoute>} />
               <Route path="admin/agents/:id" element={

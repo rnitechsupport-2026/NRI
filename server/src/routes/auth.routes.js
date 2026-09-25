@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const { z } = require('zod');
 const User = require('../models/User');
 const { signToken, requireAuth } = require('../middleware/auth');
-const { asyncHandler, makeSlug, nn, parseJson, paginate, HttpError } = require('../utils/helpers');
+const { asyncHandler, makeSlug, nn, parseJson, paginate, HttpError, toSnakeCase } = require('../utils/helpers');
 
 const ROLES = ['owner', 'buyer', 'agent', 'builder', 'service'];
 
@@ -26,7 +26,7 @@ function shapeUser(doc) {
   const obj = doc.toObject ? doc.toObject() : { ...doc };
   obj.id = String(obj._id);
   delete obj.passwordHash;
-  return obj;
+  return toSnakeCase(obj);
 }
 
 router.post('/register', asyncHandler(async (req, res) => {

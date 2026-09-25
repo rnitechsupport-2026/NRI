@@ -8,8 +8,29 @@ const Lead = require('../models/Lead');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { requireAuth, requireRole, requireApproved } = require('../middleware/auth');
-const { asyncHandler, makeSlug, nn, paginate, HttpError } = require('../utils/helpers');
+const { asyncHandler, makeSlug, nn, paginate, HttpError, toSnakeCase } = require('../utils/helpers');
 const { encryptToDisk, decryptFromDisk } = require('../utils/fileCrypto');
+
+function shapeProject(doc) {
+  if (!doc) return null;
+  const obj = doc.toObject ? doc.toObject() : doc;
+  obj.id = String(obj._id || doc._id || '');
+  obj.amenities = Array.isArray(obj.amenities) ? obj.amenities : (obj.amenities ? [obj.amenities] : []);
+  if (obj.builder && typeof obj.builder === 'object' && !obj.builder_id) {
+    const b = obj.builder;
+    obj.builder_id = b._id || b.id;
+    obj.builder_name = b.name;
+    obj.builder_company = b.companyName;
+    obj.builder_avatar = b.avatarUrl;
+    obj.builder_verified = b.isVerified;
+    obj.builder_experience = b.experienceYears;
+    obj.builder_phone = b.phone;
+    obj.builder_email = b.email;
+    obj.builder_about = b.about;
+    delete obj.builder;
+  }
+  return toSnakeCase(obj);
+}
 
 router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, offset } = paginate(req.query);
@@ -37,7 +58,7 @@ router.get('/', asyncHandler(async (req, res) => {
     Project.countDocuments(filter),
   ]);
 
-  res.json({ data: items, page, limit, total, pages: Math.ceil(total / limit) });
+  res.json({ data: items.map(shapeProject), page, limit, total, pages: Math.ceil(total / limit) });
 }));
 
 router.get('/mine/list', requireAuth, requireRole('builder', 'admin'), asyncHandler(async (req, res) => {
@@ -53,7 +74,7 @@ router.get('/mine/list', requireAuth, requireRole('builder', 'admin'), asyncHand
   ]);
   const countMap = Object.fromEntries(leadCounts.map((c) => [String(c._id), c.count]));
 
-  res.json({ data: items.map((p) => ({ ...p, lead_count: countMap[String(p._id)] || 0 })) });
+  res.json({ data: items.map((p) => ({ ...shapeProject(p), lead_count: countMap[String(p._id)] || 0 })) });
 }));
 
 router.get('/:idOrSlug', asyncHandler(async (req, res) => {
@@ -75,7 +96,7 @@ router.get('/:idOrSlug', asyncHandler(async (req, res) => {
     .limit(3)
     .lean();
 
-  res.json({ data: { ...project, amenities: project.amenities || [], images, more_from_builder: more } });
+  res.json({ data: { ...shapeProject(project), images, more_from_builder: more.map(shapeProject) } });
 }));
 
 router.post('/', requireAuth, requireRole('builder', 'admin'), requireApproved, asyncHandler(async (req, res) => {

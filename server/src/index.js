@@ -44,6 +44,7 @@ app.get('/api/health', async (_req, res) => {
 
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/properties', require('./routes/property.routes'));
+app.use('/api/microsites', require('./routes/microsite.routes'));
 app.use('/api/projects', require('./routes/project.routes'));
 app.use('/api/services', require('./routes/service.routes'));
 app.use('/api/leads', require('./routes/lead.routes'));

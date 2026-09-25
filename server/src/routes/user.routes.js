@@ -3,7 +3,14 @@ const User = require('../models/User');
 const Property = require('../models/Property');
 const Project = require('../models/Project');
 const ServiceOffering = require('../models/ServiceOffering');
-const { asyncHandler, paginate, HttpError } = require('../utils/helpers');
+const { asyncHandler, paginate, HttpError, toSnakeCase } = require('../utils/helpers');
+
+function shapePublicUser(doc) {
+  if (!doc) return null;
+  const obj = doc.toObject ? doc.toObject() : doc;
+  obj.id = String(obj._id || doc._id || '');
+  return toSnakeCase(obj);
+}
 
 router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, offset } = paginate(req.query);
@@ -45,7 +52,7 @@ router.get('/', asyncHandler(async (req, res) => {
 
   res.json({
     data: items.map((u) => ({
-      ...u,
+      ...shapePublicUser(u),
       property_count: propMap[String(u._id)] || 0,
       project_count: projMap[String(u._id)] || 0,
     })),
@@ -55,20 +62,21 @@ router.get('/', asyncHandler(async (req, res) => {
 
 router.get('/:id', asyncHandler(async (req, res) => {
   const id = req.params.id;
+  if (!/^[0-9a-fA-F]{24}$/.test(id)) throw new HttpError(404, 'Profile not found');
   const user = await User.findById(id)
-    .select('name role companyName reraId serviceCategory experienceYears city locality about avatarUrl website isVerified phone email createdAt')
+    .select('name role companyName reraId serviceCategory experienceYears city locality about avatarUrl website isVerified status phone email createdAt')
     .lean();
   if (!user || user.status !== 'active') throw new HttpError(404, 'Profile not found');
 
   const properties = await Property.find({ user: id, status: 'active' })
-    .select('id title slug purpose propertyType bhk builtUpArea areaUnit price locality city coverImage isVerified createdAt')
+    .select('title slug purpose propertyType bhk builtUpArea areaUnit price locality city coverImage isVerified createdAt')
     .sort({ createdAt: -1 })
     .limit(12)
     .lean();
 
   const projects = user.role === 'builder'
     ? await Project.find({ builder: id })
-        .select('id name slug tagline configuration minPrice maxPrice locality city coverImage status possessionOn')
+        .select('name slug tagline configuration minPrice maxPrice locality city coverImage status possessionOn')
         .sort({ createdAt: -1 })
         .limit(12)
         .lean()
@@ -76,12 +84,19 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
   const services = user.role === 'service'
     ? await ServiceOffering.find({ user: id, status: 'active' })
-        .select('id title slug category priceFrom priceUnit city coverImage rating')
+        .select('title slug category priceFrom priceUnit city coverImage rating')
         .limit(12)
         .lean()
     : [];
 
-  res.json({ data: { ...user, properties, projects, services } });
+  res.json({
+    data: {
+      ...shapePublicUser(user),
+      properties: properties.map(shapePublicUser),
+      projects: projects.map(shapePublicUser),
+      services: services.map(shapePublicUser),
+    },
+  });
 }));
 
 module.exports = router;

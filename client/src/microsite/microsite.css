@@ -18,6 +18,15 @@
   margin: 0;
   padding: 0;
 }
+/* globals.css sets `color: var(--ink)` directly on bare h1-h5 selectors (for
+   the rest of the app, which is mostly dark text on light pages) — a directly
+   declared color on the element always beats an ancestor's inherited color,
+   so every microsite heading rendered inside a themed section (light OR dark)
+   was silently forced dark regardless of what the section's own color style
+   said. Reset headings back to inheriting from whichever section wraps them. */
+.ms-root h1, .ms-root h2, .ms-root h3, .ms-root h4, .ms-root h5 {
+  color: inherit;
+}
 .ms-root ul { list-style: none; }
 .ms-root button { font: inherit; cursor: pointer; }
 .ms-root img { max-width: 100%; display: block; }

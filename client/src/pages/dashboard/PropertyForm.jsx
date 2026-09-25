@@ -1,12 +1,50 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import api, { errMsg, errFields } from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import ImagePicker from '../../components/ImagePicker.jsx';
 import TourEmbed from '../../components/TourEmbed.jsx';
 import { Field, Notice, PageLoader } from '../../components/ui.jsx';
 import { AMENITY_LIST, CITIES, TYPE_LABEL, PURPOSE_LABEL, money, titleCase } from '../../utils/format.js';
-import { Cube, Check, ArrowRight, ChevronLeft, Info } from '../../components/Icons.jsx';
+import {
+  Cube, Check, ArrowRight, ChevronLeft, Info,
+  Key, Handshake, Users, Document,
+  Building, Home, Layers, Grid, Briefcase, Store, Warehouse, Tree,
+} from '../../components/Icons.jsx';
+
+const PURPOSE_ICON = { sale: Key, rent: Handshake, pg: Users, lease: Document };
+const TYPE_ICON = {
+  apartment: Building, villa: Home, 'independent-house': Layers, plot: Grid,
+  office: Briefcase, shop: Store, warehouse: Warehouse, farmhouse: Tree,
+};
+
+const pillGrid = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.04 } },
+};
+const pillItem = {
+  hidden: { opacity: 0, y: 8, scale: 0.94 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] } },
+};
+
+function IconPills({ options, value, onChange }) {
+  return (
+    <motion.div className="pills" variants={pillGrid} initial="hidden" animate="show">
+      {options.map(([k, v, Icon]) => (
+        <motion.button
+          key={k} type="button" variants={pillItem}
+          whileHover={{ y: -2 }} whileTap={{ scale: 0.95 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+          className={`pill ${value === k ? 'on' : ''}`}
+          onClick={() => onChange(k)}
+        >
+          {Icon && <Icon style={{ width: 15, height: 15 }} />} {v}
+        </motion.button>
+      ))}
+    </motion.div>
+  );
+}
 
 const BLANK = {
   title: '', description: '', purpose: 'sale', property_type: 'apartment',
@@ -163,23 +201,21 @@ export default function PropertyForm() {
 
             <div className="full">
               <Field label="I want to" required>
-                <div className="pills">
-                  {Object.entries(PURPOSE_LABEL).map(([k, v]) => (
-                    <button key={k} type="button" className={`pill ${f.purpose === k ? 'on' : ''}`}
-                            onClick={() => setF((p) => ({ ...p, purpose: k }))}>{v}</button>
-                  ))}
-                </div>
+                <IconPills
+                  options={Object.entries(PURPOSE_LABEL).map(([k, v]) => [k, v, PURPOSE_ICON[k]])}
+                  value={f.purpose}
+                  onChange={(k) => setF((p) => ({ ...p, purpose: k }))}
+                />
               </Field>
             </div>
 
             <div className="full">
               <Field label="Property type" required>
-                <div className="pills">
-                  {Object.entries(TYPE_LABEL).map(([k, v]) => (
-                    <button key={k} type="button" className={`pill ${f.property_type === k ? 'on' : ''}`}
-                            onClick={() => setF((p) => ({ ...p, property_type: k }))}>{v}</button>
-                  ))}
-                </div>
+                <IconPills
+                  options={Object.entries(TYPE_LABEL).map(([k, v]) => [k, v, TYPE_ICON[k]])}
+                  value={f.property_type}
+                  onChange={(k) => setF((p) => ({ ...p, property_type: k }))}
+                />
               </Field>
             </div>
 

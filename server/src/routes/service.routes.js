@@ -3,7 +3,27 @@ const { z } = require('zod');
 const ServiceOffering = require('../models/ServiceOffering');
 const Lead = require('../models/Lead');
 const { requireAuth, requireRole, requireApproved } = require('../middleware/auth');
-const { asyncHandler, makeSlug, nn, paginate, HttpError } = require('../utils/helpers');
+const { asyncHandler, makeSlug, nn, paginate, HttpError, toSnakeCase } = require('../utils/helpers');
+
+function shapeService(doc) {
+  if (!doc) return null;
+  const obj = doc.toObject ? doc.toObject() : doc;
+  obj.id = String(obj._id || doc._id || '');
+  if (obj.user && typeof obj.user === 'object' && !obj.provider_id) {
+    const u = obj.user;
+    obj.provider_id = u._id || u.id;
+    obj.provider_name = u.name;
+    obj.provider_company = u.companyName;
+    obj.provider_avatar = u.avatarUrl;
+    obj.provider_verified = u.isVerified;
+    obj.provider_experience = u.experienceYears;
+    obj.provider_phone = u.phone;
+    obj.provider_email = u.email;
+    obj.provider_about = u.about;
+    delete obj.user;
+  }
+  return toSnakeCase(obj);
+}
 
 router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, offset } = paginate(req.query);
@@ -29,7 +49,7 @@ router.get('/', asyncHandler(async (req, res) => {
     ServiceOffering.countDocuments(filter),
   ]);
 
-  res.json({ data: items, page, limit, total, pages: Math.ceil(total / limit) });
+  res.json({ data: items.map(shapeService), page, limit, total, pages: Math.ceil(total / limit) });
 }));
 
 router.get('/meta/categories', asyncHandler(async (_req, res) => {
@@ -54,7 +74,7 @@ router.get('/mine/list', requireAuth, requireRole('service', 'admin'), asyncHand
   ]);
   const countMap = Object.fromEntries(leadCounts.map((c) => [String(c._id), c.count]));
 
-  res.json({ data: items.map((s) => ({ ...s, lead_count: countMap[String(s._id)] || 0 })) });
+  res.json({ data: items.map((s) => ({ ...shapeService(s), lead_count: countMap[String(s._id)] || 0 })) });
 }));
 
 router.get('/:idOrSlug', asyncHandler(async (req, res) => {
@@ -76,7 +96,7 @@ router.get('/:idOrSlug', asyncHandler(async (req, res) => {
     .limit(3)
     .lean();
 
-  res.json({ data: { ...service, related } });
+  res.json({ data: { ...shapeService(service), related: related.map(shapeService) } });
 }));
 
 router.post('/', requireAuth, requireRole('service', 'admin'), requireApproved, asyncHandler(async (req, res) => {

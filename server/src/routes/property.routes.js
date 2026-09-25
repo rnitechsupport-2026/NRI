@@ -10,7 +10,7 @@ const bot = require('../services/propertyBot');
 const searchBot = require('../services/searchBot');
 const { buildFilterFromParams: buildFilter, SORTS } = require('../services/filterUtil');
 const { requireAuth, optionalAuth, requireRole, requireApproved } = require('../middleware/auth');
-const { asyncHandler, makeSlug, nn, parseJson, paginate, HttpError } = require('../utils/helpers');
+const { asyncHandler, makeSlug, nn, parseJson, paginate, HttpError, toSnakeCase } = require('../utils/helpers');
 const { parseTourEmbed, allowedHosts } = require('../utils/embed');
 
 const CARD_FIELDS = 'title slug purpose propertyType bhk bathrooms builtUpArea areaUnit price priceNegotiable furnishing possession locality city coverImage tourUrl isFeatured isVerified status views createdAt';
@@ -35,7 +35,7 @@ function shapeDoc(doc) {
     obj.owner_email = u.email;
     delete obj.user;
   }
-  return obj;
+  return toSnakeCase(obj);
 }
 
 router.get('/', asyncHandler(async (req, res) => {

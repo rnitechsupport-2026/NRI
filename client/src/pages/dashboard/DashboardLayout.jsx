@@ -10,7 +10,7 @@ export default function DashboardLayout() {
   const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isPending = user.approvalStatus === 'pending';
+  const isPending = user.approval_status === 'pending';
 
   return (
     <div className="appshell">

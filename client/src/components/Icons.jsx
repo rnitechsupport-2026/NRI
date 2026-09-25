@@ -76,6 +76,11 @@ export const Sparkle = (p) => <Ico {...p}><path d="M12 3.2 13.9 9l5.8 1.9-5.8 1.
 export const Send = (p) => <Ico {...p}><path d="M20.5 3.5 10.8 13.2" /><path d="M20.5 3.5 14.3 20.6l-3.5-7.4-7.4-3.5z" /></Ico>;
 export const Refresh = (p) => <Ico {...p}><path d="M20 11.5a8 8 0 1 1-2.4-5.7" /><path d="M20.3 4v4.4h-4.4" /></Ico>;
 export const Bell = (p) => <Ico {...p}><path d="M18 8.5a6 6 0 0 0-12 0c0 6-2.2 7.5-2.2 7.5h16.4S18 14.5 18 8.5" /><path d="M13.7 20a2 2 0 0 1-3.4 0" /></Ico>;
+export const Store = (p) => <Ico {...p}><path d="M4 9.5 5.2 4h13.6l1.2 5.5" /><path d="M4 9.5a2.3 2.3 0 0 0 4.6 0 2.3 2.3 0 0 0 4.6 0 2.3 2.3 0 0 0 4.6 0 2.3 2.3 0 0 0 4.6 0" /><path d="M5 9.5V20h14V9.5" /><path d="M9.5 20v-6h5v6" /></Ico>;
+export const Warehouse = (p) => <Ico {...p}><path d="M3 10.5 12 4l9 6.5V20H3z" /><path d="M8 20v-6.5h8V20" /></Ico>;
+export const Monitor = (p) => <Ico {...p}><rect x="2.5" y="4" width="19" height="13" rx="1.6" /><path d="M8 20.5h8M12 17v3.5" /></Ico>;
+export const Tablet = (p) => <Ico {...p}><rect x="5" y="2.5" width="14" height="19" rx="2" /><path d="M12 18.5h.01" /></Ico>;
+export const Smartphone = (p) => <Ico {...p}><rect x="7" y="2.5" width="10" height="19" rx="2" /><path d="M12 18.2h.01" /></Ico>;
 
 /* ---- amenity icons ---- */
 export const Elevator = (p) => <Ico {...p}><rect x="5" y="3" width="14" height="18" rx="2" /><path d="m9.5 10.5 2.5-2.5 2.5 2.5" /><path d="m9.5 13.5 2.5 2.5 2.5-2.5" /></Ico>;

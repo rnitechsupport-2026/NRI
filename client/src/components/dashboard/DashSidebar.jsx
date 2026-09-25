@@ -3,13 +3,13 @@ import { NavLink } from 'react-router-dom';
 import Logo from '../Logo.jsx';
 import {
   Dashboard, Home, Plus, Building, Wrench, Inbox, Heart, Settings, Shield, User, Calendar,
-  Chart, Users, Document, Clock, ChevronDown, X,
+  Chart, Users, Document, Clock, ChevronDown, X, Layers,
 } from '../Icons.jsx';
 
 export default function DashSidebar({ user, mobileOpen, onClose }) {
   const [adminOpen, setAdminOpen] = useState(true);
 
-  const isPending = user.approvalStatus === 'pending';
+  const isPending = user.approval_status === 'pending';
   // Post-listing links stay visible while pending — RequireApproved (App.jsx)
   // shows a clear "under verification" screen if they're clicked, which is
   // more informative than the link silently disappearing.
@@ -19,13 +19,14 @@ export default function DashSidebar({ user, mobileOpen, onClose }) {
 
   const isAdmin = user.role === 'admin';
   const isEmployee = user.role === 'employee';
-  const portals = isAdmin ? ['owner', 'agent', 'builder', 'service'] : (user.managedPortals || []);
+  const portals = isAdmin ? ['owner', 'agent', 'builder', 'service'] : (user.managed_portals || []);
 
   const menuLinks = [
     { to: '/dashboard', label: 'Overview', icon: Dashboard, end: true },
     ...(canProperty ? [
       { to: '/dashboard/properties', label: 'My Properties', icon: Home },
       { to: '/dashboard/property/new', label: 'Post Property', icon: Plus, locked: isPending },
+      { to: '/dashboard/microsites', label: 'Microsites', icon: Layers },
     ] : []),
     ...(isBuilder ? [
       { to: '/dashboard/projects', label: 'My Projects', icon: Building },
@@ -64,6 +65,8 @@ export default function DashSidebar({ user, mobileOpen, onClose }) {
     ...(portals.includes('service')
       ? [{ to: '/dashboard/admin/services', label: 'Manage Services', icon: Wrench }] : []),
     { to: '/dashboard/admin/leads', label: 'All Enquiries', icon: Inbox },
+    ...(portals.some((p) => p === 'owner' || p === 'agent' || p === 'builder')
+      ? [{ to: '/dashboard/admin/microsites', label: 'Microsites', icon: Layers }] : []),
     { to: '/dashboard/admin/audit-log', label: 'Audit Log', icon: Document },
   ] : [];
 

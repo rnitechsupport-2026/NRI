@@ -4,7 +4,7 @@ import api, { errMsg } from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import { Empty, Modal, PageLoader } from '../../components/ui.jsx';
 import { money, timeAgo, titleCase, PURPOSE_LABEL, shareUrl } from '../../utils/format.js';
-import { Home, Plus, Edit, Trash, Eye, Inbox, Cube, ArrowRight, Send } from '../../components/Icons.jsx';
+import { Home, Plus, Edit, Trash, Eye, Inbox, Cube, ArrowRight, Send, Layers } from '../../components/Icons.jsx';
 
 const STATUS_CLS = {
   active: 'badge-green', pending: 'badge-amber', sold: 'badge-navy',
@@ -141,6 +141,9 @@ export default function MyProperties() {
                         </Link>
                         <Link to={`/dashboard/property/${p.id}/edit`} className="btn btn-xs btn-outline" title="Edit">
                           <Edit />
+                        </Link>
+                        <Link to={`/dashboard/microsites/new?propertyId=${p.id}`} className="btn btn-xs btn-outline" title="Create Microsite">
+                          <Layers />
                         </Link>
                         <button type="button" className="btn btn-xs btn-danger" title="Delete"
                                 onClick={() => setConfirm(p)}>

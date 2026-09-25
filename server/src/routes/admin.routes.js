@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Property = require('../models/Property');
 const Project = require('../models/Project');
 const ServiceOffering = require('../models/ServiceOffering');
+const Microsite = require('../models/Microsite');
 const Lead = require('../models/Lead');
 const AgentProfile = require('../models/AgentProfile');
 const AgentDocument = require('../models/AgentDocument');
@@ -261,6 +262,48 @@ router.put('/properties/:id/feature', asyncHandler(async (req, res) => {
 router.delete('/properties/:id', asyncHandler(async (req, res) => {
   await moderateListing(req, Property, 'user', req.params.id, null, true);
   res.json({ message: 'Listing deleted' });
+}));
+
+/* ================================================================ microsites */
+
+router.get('/microsites', asyncHandler(async (req, res) => {
+  const scope = resolvePortalScope(req, req.query.portal);
+  const ownerIds = await userIdsForPortals(scope);
+  const { page, limit, offset } = paginate(req.query);
+
+  const filter = { createdBy: { $in: ownerIds } };
+  const [rows, total] = await Promise.all([
+    Microsite.find(filter).populate('property', 'title slug').populate('createdBy', 'name role companyName')
+      .sort({ createdAt: -1 }).skip(offset).limit(limit).lean(),
+    Microsite.countDocuments(filter),
+  ]);
+
+  res.json({
+    data: rows.map((m) => ({
+      id: String(m._id),
+      slug: m.slug,
+      status: m.status,
+      templateId: m.templateId,
+      propertyTitle: m.property?.title,
+      propertySlug: m.property?.slug,
+      createdByName: m.createdBy?.name,
+      createdByRole: m.createdBy?.role,
+      publishedAt: m.publishedAt,
+      createdAt: m.createdAt,
+    })),
+    meta: { page, limit, total },
+  });
+}));
+
+router.put('/microsites/:id/status', asyncHandler(async (req, res) => {
+  const { status } = z.object({ status: z.enum(['draft', 'published']) }).parse(req.body);
+  await moderateListing(req, Microsite, 'createdBy', req.params.id, { status, publishedAt: status === 'published' ? new Date() : undefined });
+  res.json({ message: status === 'published' ? 'Microsite published' : 'Microsite unpublished' });
+}));
+
+router.delete('/microsites/:id', asyncHandler(async (req, res) => {
+  await moderateListing(req, Microsite, 'createdBy', req.params.id, null, true);
+  res.json({ message: 'Microsite deleted' });
 }));
 
 /* ================================================================= projects */
