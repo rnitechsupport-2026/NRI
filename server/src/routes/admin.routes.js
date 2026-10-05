@@ -273,7 +273,7 @@ router.get('/microsites', asyncHandler(async (req, res) => {
 
   const filter = { createdBy: { $in: ownerIds } };
   const [rows, total] = await Promise.all([
-    Microsite.find(filter).populate('property', 'title slug').populate('createdBy', 'name role companyName')
+    Microsite.find(filter).populate('property', 'title slug').populate('project', 'name slug').populate('createdBy', 'name role companyName')
       .sort({ createdAt: -1 }).skip(offset).limit(limit).lean(),
     Microsite.countDocuments(filter),
   ]);
@@ -284,8 +284,8 @@ router.get('/microsites', asyncHandler(async (req, res) => {
       slug: m.slug,
       status: m.status,
       templateId: m.templateId,
-      propertyTitle: m.property?.title,
-      propertySlug: m.property?.slug,
+      propertyTitle: m.property?.title || m.project?.name,
+      propertySlug: m.property?.slug || m.project?.slug,
       createdByName: m.createdBy?.name,
       createdByRole: m.createdBy?.role,
       publishedAt: m.publishedAt,

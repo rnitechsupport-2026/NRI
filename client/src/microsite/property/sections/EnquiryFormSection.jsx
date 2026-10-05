@@ -11,7 +11,9 @@ export default function EnquiryFormSection({ property: p, data = {}, settings = 
         <h2 className={`${headingFontClass(theme)} mb-2 text-center text-3xl font-semibold`}>{data.heading || 'Interested?'}</h2>
         <p className="mb-8 text-center text-sm opacity-70">{data.subheading || 'Share your details and get a call back within 24 hours.'}</p>
         <div className="bg-white p-1 shadow-xl" style={{ borderRadius: 'var(--ms-radius)' }}>
-          <EnquiryForm propertyId={p.id} contactPhone={p.owner_phone} title="" />
+          {p.entity_type === 'project'
+            ? <EnquiryForm projectId={p.id} contactPhone={p.owner_phone} title="" compact />
+            : <EnquiryForm propertyId={p.id} contactPhone={p.owner_phone} title="" compact />}
         </div>
       </FadeIn>
     </section>

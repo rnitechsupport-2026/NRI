@@ -14,7 +14,7 @@ export default function Highlights({ data = {}, settings = {}, theme }) {
         <FadeIn>
           <h2 className={`${headingFontClass(theme)} mb-8 text-3xl font-semibold`}>{data.heading || 'Highlights'}</h2>
         </FadeIn>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           {items.map((item, i) => (
             <FadeIn key={i} delay={Math.min(i * 0.06, 0.4)}>
               <motion.div

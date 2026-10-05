@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import { MapPin, Shield, Cube, ChevronDown } from '../../../components/Icons.jsx';
-import { priceLabel, PURPOSE_LABEL, TYPE_LABEL } from '../../../utils/format.js';
+import { priceLabel, money, PURPOSE_LABEL, TYPE_LABEL } from '../../../utils/format.js';
 import ThemedButton from '../ThemedButton.jsx';
-import { headingFontClass } from '../theme.js';
+import { headingFontClass, priceDisplay } from '../theme.js';
 
 const container = {
   hidden: {},
@@ -18,7 +18,7 @@ export default function Hero({ property: p, data = {}, settings = {}, theme }) {
   const overlay = settings.overlay ?? 0.5;
   const align = settings.alignment === 'left' ? 'items-start text-left' : 'items-center text-center';
   const tall = settings.height === 'tall' ? 'min-h-[88vh]' : 'min-h-[64vh]';
-  const price = priceLabel(p.purpose, p.price);
+  const price = priceDisplay(p, priceLabel, money);
   const address = [p.locality, p.city].filter(Boolean).join(', ');
 
   return (

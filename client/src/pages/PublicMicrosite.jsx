@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import api, { errMsg } from '../api/client.js';
 import { Notice, PageLoader } from '../components/ui.jsx';
 import PropertyBot from '../components/PropertyBot.jsx';
+import ProjectBot from '../components/ProjectBot.jsx';
 import MicrositeRenderer from '../microsite/property/MicrositeRenderer.jsx';
 
 export default function PublicMicrosite() {
@@ -45,7 +46,11 @@ export default function PublicMicrosite() {
         theme={state.microsite.theme}
         navbar={state.microsite.navbar}
       />
-      <PropertyBot propertyId={state.property.id} title={state.property.title} price={state.property.price} purpose={state.property.purpose} />
+      {state.property.entity_type === 'project' ? (
+        <ProjectBot projectId={state.property.id} title={state.property.title} price={state.property.price} />
+      ) : (
+        <PropertyBot propertyId={state.property.id} title={state.property.title} price={state.property.price} purpose={state.property.purpose} />
+      )}
     </>
   );
 }

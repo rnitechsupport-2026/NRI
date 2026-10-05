@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import api, { errMsg } from '../api/client.js';
 import EnquiryForm from '../components/EnquiryForm.jsx';
 import ProjectCard from '../components/ProjectCard.jsx';
+import ProjectBot from '../components/ProjectBot.jsx';
+import MicrositeRenderer from '../microsite/property/MicrositeRenderer.jsx';
 import { Avatar, Crumbs, Notice, PageLoader } from '../components/ui.jsx';
 import { money, area, shortDate, titleCase } from '../utils/format.js';
 import {
@@ -16,6 +18,8 @@ export default function ProjectDetail() {
   const [p, setP] = useState(null);
   const [error, setError] = useState('');
   const [idx, setIdx] = useState(0);
+  // undefined = still checking, null = none published, object = render this instead
+  const [microsite, setMicrosite] = useState(undefined);
 
   useEffect(() => {
     let live = true;
@@ -26,6 +30,36 @@ export default function ProjectDetail() {
     return () => { live = false; };
   }, [idOrSlug]);
 
+  // Fired in parallel with the project fetch above — a builder can publish a
+  // microsite for their project; when they have, it fully replaces this page.
+  useEffect(() => {
+    let live = true;
+    setMicrosite(undefined);
+    api.get(`/microsites/for-project/${idOrSlug}`)
+      .then((r) => { if (live) setMicrosite(r.data.data); })
+      .catch(() => { if (live) setMicrosite(null); });
+    return () => { live = false; };
+  }, [idOrSlug]);
+
+  useEffect(() => {
+    document.body.classList.toggle('ms-page-active', !!microsite);
+    return () => document.body.classList.remove('ms-page-active');
+  }, [microsite]);
+
+  if (microsite) {
+    return (
+      <>
+        <MicrositeRenderer
+          property={microsite.property}
+          sections={microsite.sections}
+          theme={microsite.microsite.theme}
+          navbar={microsite.microsite.navbar}
+        />
+        <ProjectBot projectId={microsite.property.id} title={microsite.property.title} price={microsite.property.price} />
+      </>
+    );
+  }
+
   if (error) {
     return (
       <div className="container section">
@@ -34,7 +68,7 @@ export default function ProjectDetail() {
       </div>
     );
   }
-  if (!p) return <PageLoader label="Loading project…" />;
+  if (!p || microsite === undefined) return <PageLoader label="Loading project…" />;
 
   const images = p.images?.length ? p.images.map((i) => i.url) : [p.cover_image || FALLBACK];
   const amenities = Array.isArray(p.amenities) ? p.amenities : [];

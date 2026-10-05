@@ -28,6 +28,16 @@ export function resolveTheme(theme = {}) {
   return { ...t, cssVars };
 }
 
+/** True if a hex color is dark enough that it needs light (not dark) text on
+ *  top of it. Used by the navbar, which can't assume its own background is
+ *  light the way the rest of a themed section can (tone: 'light'/'dark'). */
+export function isDarkColor(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  if (!m) return false;
+  const [r, g, b] = [m[1], m[2], m[3]].map((h) => parseInt(h, 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) < 150;
+}
+
 export function headingFontClass(theme) {
   return theme.fontStyle === 'modern' ? '' : 'ms-serif';
 }
@@ -47,6 +57,16 @@ export function primaryButtonStyle(theme) {
     return { background: theme.primaryColor, color: '#fff', borderRadius: '999px' };
   }
   return { background: theme.primaryColor, color: '#fff', borderRadius: radius };
+}
+
+/** A single listing has one price; a project has a range across its unit
+ *  types. `p.price_range` (set only by the project hydrator) switches this
+ *  to "₹X – ₹Y" instead of the usual single priceLabel() output. */
+export function priceDisplay(p, priceLabel, money) {
+  if (p.price_range) {
+    return { main: `${money(p.price_range.min)} – ${money(p.price_range.max)}`, suffix: '' };
+  }
+  return priceLabel(p.purpose, p.price);
 }
 
 export function secondaryButtonStyle(theme) {

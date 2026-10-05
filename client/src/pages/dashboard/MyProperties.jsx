@@ -14,6 +14,7 @@ const STATUS_CLS = {
 export default function MyProperties() {
   const toast = useToast();
   const [rows, setRows] = useState(null);
+  const [micrositeByProperty, setMicrositeByProperty] = useState({});
   const [filter, setFilter] = useState('all');
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +23,16 @@ export default function MyProperties() {
     .then((r) => setRows(r.data.data))
     .catch(() => setRows([]));
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get('/microsites/mine')
+      .then((r) => {
+        const map = {};
+        r.data.data.forEach((m) => { if (m.property) map[m.property] = m.id; });
+        setMicrositeByProperty(map);
+      })
+      .catch(() => {});
+  }, []);
 
   const counts = useMemo(() => {
     const c = { all: rows?.length || 0 };
@@ -142,7 +152,8 @@ export default function MyProperties() {
                         <Link to={`/dashboard/property/${p.id}/edit`} className="btn btn-xs btn-outline" title="Edit">
                           <Edit />
                         </Link>
-                        <Link to={`/dashboard/microsites/new?propertyId=${p.id}`} className="btn btn-xs btn-outline" title="Create Microsite">
+                        <Link to={micrositeByProperty[p.id] ? `/dashboard/microsites/${micrositeByProperty[p.id]}/build` : `/dashboard/microsites/new?propertyId=${p.id}`}
+                              className="btn btn-xs btn-outline" title={micrositeByProperty[p.id] ? 'Manage Microsite' : 'Create Microsite'}>
                           <Layers />
                         </Link>
                         <button type="button" className="btn btn-xs btn-danger" title="Delete"

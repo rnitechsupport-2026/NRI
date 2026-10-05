@@ -25,6 +25,9 @@ const projectSchema = new mongoose.Schema(
     status: { type: String, enum: ['upcoming', 'ongoing', 'completed'], default: 'ongoing' },
     isFeatured: { type: Boolean, default: false },
     views: { type: Number, default: 0 },
+    aiSummary: { type: String },
+    aiSummaryAt: { type: Date },
+    aiSummarySource: { type: String, enum: ['ai', 'template'] },
 
     // Compliance verification — separate from `status` (construction stage) and
     // from `reraNo` (freeform, shown on the public listing). This is the

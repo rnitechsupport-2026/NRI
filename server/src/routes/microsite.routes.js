@@ -4,6 +4,8 @@ const Microsite = require('../models/Microsite');
 const MicrositeSection = require('../models/MicrositeSection');
 const Property = require('../models/Property');
 const PropertyImage = require('../models/PropertyImage');
+const Project = require('../models/Project');
+const ProjectImage = require('../models/ProjectImage');
 const Favorite = require('../models/Favorite');
 const { requireAuth, optionalAuth, requireApproved } = require('../middleware/auth');
 const { asyncHandler, makeSlug, HttpError } = require('../utils/helpers');
@@ -19,6 +21,15 @@ async function loadOwnedProperty(req, propertyId) {
   return property;
 }
 
+async function loadOwnedProject(req, projectId) {
+  const project = await Project.findById(projectId).select('builder name slug').lean();
+  if (!project) throw new HttpError(404, 'Project not found');
+  if (project.builder.toString() !== req.user._id.toString() && !isStaff(req.user.role)) {
+    throw new HttpError(403, 'You can only build a microsite for your own project');
+  }
+  return project;
+}
+
 async function loadOwnedMicrosite(req, id) {
   const microsite = await Microsite.findById(id).lean();
   if (!microsite) throw new HttpError(404, 'Microsite not found');
@@ -32,6 +43,7 @@ function shapeMicrosite(m) {
   const obj = { ...m };
   obj.id = String(obj._id);
   obj.property = obj.property ? String(obj.property) : null;
+  obj.project = obj.project ? String(obj.project) : null;
   delete obj._id;
   delete obj.__v;
   return obj;
@@ -48,7 +60,10 @@ function shapeSection(s) {
 
 const sectionInput = z.object({
   sectionType: z.string().min(1).max(60),
-  sectionOrder: z.number().int().default(0),
+  // No .default() here on purpose — omitting it must fall through to the
+  // route handler's `s.sectionOrder ?? i` (array-index) fallback below, not
+  // silently collapse every section in a fresh template to the same 0.
+  sectionOrder: z.number().int().optional(),
   isVisible: z.boolean().default(true),
   sectionData: z.record(z.any()).optional().default({}),
   settings: z.record(z.any()).optional().default({}),
@@ -132,7 +147,84 @@ async function hydrateProperty(propertyId) {
     owner_experience: owner.experienceYears,
     owner_phone: owner.phone,
     owner_email: owner.email,
+    entity_type: 'property',
   };
+}
+
+/** Same idea as hydrateProperty, but for a builder project — shaped as close
+ *  to the property object as the data allows (title/price/owner_* etc.) so
+ *  the same section components can render either without needing their own
+ *  parallel set. `entity_type: 'project'` is how they tell the two apart for
+ *  the handful of facts that genuinely don't translate (BHK, floor, etc). */
+async function hydrateProject(projectId) {
+  const project = await Project.findById(projectId)
+    .populate({ path: 'builder', select: 'name role phone email companyName avatarUrl isVerified experienceYears about' })
+    .lean();
+  if (!project) return null;
+  const images = await ProjectImage.find({ project: project._id }).sort({ sortOrder: 1, _id: 1 }).lean();
+  const builder = project.builder || {};
+  const hasRange = project.minPrice && project.maxPrice && project.minPrice !== project.maxPrice;
+  return {
+    id: String(project._id),
+    title: project.name,
+    slug: project.slug,
+    description: [project.tagline, project.description].filter(Boolean).join('\n\n'),
+    purpose: 'sale',
+    property_type: project.projectType,
+    bhk: null,
+    bathrooms: null,
+    balconies: null,
+    furnishing: null,
+    facing: null,
+    floor_no: null,
+    total_floors: null,
+    age_years: null,
+    possession: null,
+    built_up_area: null,
+    carpet_area: null,
+    area_unit: 'sqft',
+    price: project.minPrice || project.maxPrice || 0,
+    price_range: hasRange ? { min: project.minPrice, max: project.maxPrice } : null,
+    price_negotiable: false,
+    maintenance: null,
+    address: project.address,
+    locality: project.locality,
+    city: project.city,
+    state: null,
+    pincode: null,
+    amenities: Array.isArray(project.amenities) ? project.amenities : [],
+    cover_image: project.coverImage,
+    tour_url: null,
+    tour_provider: null,
+    video_url: null,
+    floor_plan_url: null,
+    is_verified: project.verificationStatus === 'verified',
+    status: project.status,
+    views: project.views,
+    images: images.map((i) => ({ url: i.url })),
+    owner_id: builder._id ? String(builder._id) : null,
+    owner_name: builder.name,
+    owner_role: builder.role || 'builder',
+    owner_company: builder.companyName,
+    owner_avatar: builder.avatarUrl,
+    owner_verified: builder.isVerified,
+    owner_experience: builder.experienceYears,
+    owner_phone: builder.phone,
+    owner_email: builder.email,
+    entity_type: 'project',
+    configuration: project.configuration,
+    total_units: project.totalUnits,
+    towers: project.towers,
+    min_area: project.minArea,
+    max_area: project.maxArea,
+    possession_on: project.possessionOn,
+    rera_no: project.reraNo,
+  };
+}
+
+/** Hydrates whichever entity a microsite doc points at. */
+function hydrateForMicrosite(microsite) {
+  return microsite.property ? hydrateProperty(microsite.property) : hydrateProject(microsite.project);
 }
 
 /** GET /property/:propertyId/preview — hydrated property (same shape hydrateProperty
@@ -145,24 +237,40 @@ router.get('/property/:propertyId/preview', requireAuth, asyncHandler(async (req
   res.json({ data: property });
 }));
 
-/** POST / — create a microsite from a chosen template's preset payload. */
+/** GET /project/:projectId/preview — same idea, for a builder project. */
+router.get('/project/:projectId/preview', requireAuth, asyncHandler(async (req, res) => {
+  await loadOwnedProject(req, req.params.projectId);
+  const project = await hydrateProject(req.params.projectId);
+  if (!project) throw new HttpError(404, 'Project not found');
+  res.json({ data: project });
+}));
+
+/** POST / — create a microsite from a chosen template's preset payload, for
+ *  either a property listing or a builder project. */
 router.post('/', requireAuth, requireApproved, asyncHandler(async (req, res) => {
   const d = z.object({
-    property_id: z.string().regex(/^[0-9a-fA-F]{24}$/),
+    entity_type: z.enum(['property', 'project']).default('property'),
+    entity_id: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
+    property_id: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(), // back-compat alias for entity_type: 'property'
     template_id: z.enum(['premium-luxury', 'modern-real-estate', 'lead-generation', 'editorial', 'custom']),
     sections: z.array(sectionInput).min(1),
     theme: themeInput.optional(),
     navbar: navbarInput.optional(),
   }).parse(req.body);
 
-  const property = await loadOwnedProperty(req, d.property_id);
+  const id = d.entity_id || d.property_id;
+  if (!id) throw new HttpError(422, 'Missing the property or project to build this microsite for');
+  const isProject = d.entity_type === 'project';
 
-  const already = await Microsite.findOne({ property: property._id }).select('_id').lean();
-  if (already) throw new HttpError(409, 'This property already has a microsite. Edit the existing one instead.');
+  const entity = isProject ? await loadOwnedProject(req, id) : await loadOwnedProperty(req, id);
+  const entityTitle = isProject ? entity.name : entity.title;
 
-  const slug = await makeSlug('microsites', property.title);
+  const already = await Microsite.findOne(isProject ? { project: entity._id } : { property: entity._id }).select('_id').lean();
+  if (already) throw new HttpError(409, `This ${isProject ? 'project' : 'property'} already has a microsite. Edit the existing one instead.`);
+
+  const slug = await makeSlug('microsites', entityTitle);
   const microsite = await Microsite.create({
-    property: property._id,
+    ...(isProject ? { project: entity._id } : { property: entity._id }),
     createdBy: req.user._id,
     templateId: d.template_id,
     slug,
@@ -191,25 +299,47 @@ router.post('/', requireAuth, requireApproved, asyncHandler(async (req, res) => 
 
 /** GET /mine — the current user's microsites. */
 router.get('/mine', requireAuth, asyncHandler(async (req, res) => {
-  const filter = isStaff(req.user.role) ? {} : { createdBy: req.user._id };
-  const rows = await Microsite.find(filter).populate('property', 'title slug coverImage').sort({ createdAt: -1 }).lean();
+  let filter = {};
+  if (!isStaff(req.user.role)) {
+    const [ownedProperties, ownedProjects] = await Promise.all([
+      Property.find({ user: req.user._id }).select('_id').lean(),
+      Project.find({ builder: req.user._id }).select('_id').lean(),
+    ]);
+    filter = {
+      $or: [
+        { createdBy: req.user._id },
+        { property: { $in: ownedProperties.map((p) => p._id) } },
+        { project: { $in: ownedProjects.map((p) => p._id) } },
+      ],
+    };
+  }
+  const rows = await Microsite.find(filter)
+    .populate('property', 'title slug coverImage')
+    .populate('project', 'name slug coverImage')
+    .sort({ createdAt: -1 })
+    .lean();
   res.json({
-    data: rows.map((m) => ({
-      ...shapeMicrosite(m),
-      propertyTitle: m.property?.title,
-      propertySlug: m.property?.slug,
-      propertyImage: m.property?.coverImage,
-      property: m.property ? String(m.property._id) : null,
-    })),
+    data: rows.map((m) => {
+      const entity = m.property || m.project;
+      return {
+        ...shapeMicrosite(m),
+        entityType: m.property ? 'property' : 'project',
+        propertyTitle: entity?.title || entity?.name,
+        propertySlug: entity?.slug,
+        propertyImage: entity?.coverImage,
+        property: m.property ? String(m.property._id) : null,
+        project: m.project ? String(m.project._id) : null,
+      };
+    }),
   });
 }));
 
-/** GET /:id — full doc + sections + hydrated property, for the builder. */
+/** GET /:id — full doc + sections + hydrated entity, for the builder. */
 router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
   const microsite = await loadOwnedMicrosite(req, req.params.id);
   const [sections, property] = await Promise.all([
     MicrositeSection.find({ microsite: microsite._id }).sort({ sectionOrder: 1 }).lean(),
-    hydrateProperty(microsite.property),
+    hydrateForMicrosite(microsite),
   ]);
   res.json({
     data: {
@@ -307,7 +437,7 @@ router.get('/public/:slug', optionalAuth, asyncHandler(async (req, res) => {
 
   const [sections, property] = await Promise.all([
     MicrositeSection.find({ microsite: microsite._id, isVisible: true }).sort({ sectionOrder: 1 }).lean(),
-    hydrateProperty(microsite.property),
+    hydrateForMicrosite(microsite),
   ]);
   if (!property) throw new HttpError(404, 'The listing behind this microsite is no longer available');
 
@@ -316,6 +446,70 @@ router.get('/public/:slug', optionalAuth, asyncHandler(async (req, res) => {
       microsite: shapeMicrosite(microsite),
       sections: sections.map(shapeSection),
       property,
+    },
+  });
+}));
+
+/** GET /for-property/:idOrSlug — no auth. Lets the real property detail page ask
+ *  "does this listing have a published microsite?" without knowing the microsite's
+ *  own slug. Same published-only rule as /public/:slug. */
+router.get('/for-property/:idOrSlug', optionalAuth, asyncHandler(async (req, res) => {
+  const key = req.params.idOrSlug;
+  const byId = /^[0-9a-fA-F]{24}$/.test(key);
+  const property = await Property.findOne(byId ? { _id: key } : { slug: key }).select('_id').lean();
+  if (!property) throw new HttpError(404, 'Property not found');
+
+  const microsite = await Microsite.findOne({ property: property._id }).lean();
+  if (!microsite) throw new HttpError(404, 'No microsite for this property');
+
+  const isPreview = req.query.preview === '1';
+  const allowedPreview = isPreview && req.user &&
+    (String(microsite.createdBy) === String(req.user._id) || isStaff(req.user.role));
+  if (microsite.status !== 'published' && !allowedPreview) {
+    throw new HttpError(404, 'This microsite is not published yet');
+  }
+
+  const [sections, hydrated] = await Promise.all([
+    MicrositeSection.find({ microsite: microsite._id, isVisible: true }).sort({ sectionOrder: 1 }).lean(),
+    hydrateProperty(microsite.property),
+  ]);
+
+  res.json({
+    data: {
+      microsite: shapeMicrosite(microsite),
+      sections: sections.map(shapeSection),
+      property: hydrated,
+    },
+  });
+}));
+
+/** GET /for-project/:idOrSlug — same as /for-property, keyed by project instead. */
+router.get('/for-project/:idOrSlug', optionalAuth, asyncHandler(async (req, res) => {
+  const key = req.params.idOrSlug;
+  const byId = /^[0-9a-fA-F]{24}$/.test(key);
+  const project = await Project.findOne(byId ? { _id: key } : { slug: key }).select('_id').lean();
+  if (!project) throw new HttpError(404, 'Project not found');
+
+  const microsite = await Microsite.findOne({ project: project._id }).lean();
+  if (!microsite) throw new HttpError(404, 'No microsite for this project');
+
+  const isPreview = req.query.preview === '1';
+  const allowedPreview = isPreview && req.user &&
+    (String(microsite.createdBy) === String(req.user._id) || isStaff(req.user.role));
+  if (microsite.status !== 'published' && !allowedPreview) {
+    throw new HttpError(404, 'This microsite is not published yet');
+  }
+
+  const [sections, hydrated] = await Promise.all([
+    MicrositeSection.find({ microsite: microsite._id, isVisible: true }).sort({ sectionOrder: 1 }).lean(),
+    hydrateProject(microsite.project),
+  ]);
+
+  res.json({
+    data: {
+      microsite: shapeMicrosite(microsite),
+      sections: sections.map(shapeSection),
+      property: hydrated,
     },
   });
 }));

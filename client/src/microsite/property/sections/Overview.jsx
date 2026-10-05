@@ -1,12 +1,20 @@
 import { motion } from 'framer-motion';
-import { Bed, Bath, Ruler, Sofa, Compass, Stairs, Clock } from '../../../components/Icons.jsx';
-import { area, titleCase, rupees } from '../../../utils/format.js';
+import { Bed, Bath, Ruler, Sofa, Compass, Stairs, Clock, Grid, Building, Layers } from '../../../components/Icons.jsx';
+import { area, titleCase, rupees, shortDate } from '../../../utils/format.js';
 import { toneStyle, headingFontClass, cardStyle } from '../theme.js';
 import FadeIn from '../FadeIn.jsx';
 
 export default function Overview({ property: p, data = {}, settings = {}, theme }) {
   const tone = settings.tone || 'light';
-  const facts = [
+  const isProject = p.entity_type === 'project';
+
+  const facts = isProject ? [
+    { icon: Grid, label: 'Configuration', value: p.configuration || null },
+    { icon: Building, label: 'Total units', value: p.total_units || null },
+    { icon: Layers, label: 'Towers', value: p.towers || null },
+    { icon: Ruler, label: 'Area range', value: (p.min_area && p.max_area) ? `${p.min_area}–${p.max_area} sqft` : null },
+    { icon: Clock, label: 'Possession', value: p.possession_on ? shortDate(p.possession_on) : null },
+  ].filter((f) => f.value) : [
     { icon: Bed, label: 'Bedrooms', value: p.bhk ? `${p.bhk} BHK` : null },
     { icon: Bath, label: 'Bathrooms', value: p.bathrooms || null },
     { icon: Ruler, label: 'Built-up area', value: area(p.built_up_area, p.area_unit) },
@@ -16,7 +24,10 @@ export default function Overview({ property: p, data = {}, settings = {}, theme 
     { icon: Clock, label: 'Possession', value: p.possession ? titleCase(p.possession) : null },
   ].filter((f) => f.value);
 
-  const specs = [
+  const specs = isProject ? [
+    ['Project type', titleCase(p.property_type)],
+    ['RERA number', p.rera_no || null],
+  ].filter(([, v]) => v) : [
     ['Property type', titleCase(p.property_type)],
     ['Carpet area', area(p.carpet_area, p.area_unit)],
     ['Age', p.age_years != null ? `${p.age_years} years` : null],
@@ -27,11 +38,11 @@ export default function Overview({ property: p, data = {}, settings = {}, theme 
     <section id="ms-overview" className="px-6" style={{ ...toneStyle(theme, tone), paddingTop: 'var(--ms-pad-y)', paddingBottom: 'var(--ms-pad-y)' }}>
       <div className="mx-auto max-w-5xl">
         <FadeIn>
-          <h2 className={`${headingFontClass(theme)} mb-8 text-3xl font-semibold`}>{data.heading || 'Property Overview'}</h2>
+          <h2 className={`${headingFontClass(theme)} mb-8 text-3xl font-semibold`}>{data.heading || (isProject ? 'Project Overview' : 'Property Overview')}</h2>
         </FadeIn>
 
         {facts.length > 0 && (
-          <div className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="mb-10 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
             {facts.map((f, i) => (
               <FadeIn key={f.label} delay={i * 0.05}>
                 <motion.div

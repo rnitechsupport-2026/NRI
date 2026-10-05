@@ -4,20 +4,30 @@ import api, { errMsg } from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import { Empty, Modal, PageLoader } from '../../components/ui.jsx';
 import { money, shortDate, titleCase } from '../../utils/format.js';
-import { Building, Plus, Edit, Trash, Eye, Inbox } from '../../components/Icons.jsx';
+import { Building, Plus, Edit, Trash, Eye, Inbox, Layers } from '../../components/Icons.jsx';
 
 const STATUS_CLS = { upcoming: 'badge-blue', ongoing: 'badge-amber', completed: 'badge-green' };
 
 export default function MyProjects() {
   const toast = useToast();
   const [rows, setRows] = useState(null);
+  const [micrositeByProject, setMicrositeByProject] = useState({});
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = () => api.get('/projects/mine/list')
     .then((r) => setRows(r.data.data)).catch(() => setRows([]));
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get('/microsites/mine')
+      .then((r) => {
+        const map = {};
+        r.data.data.forEach((m) => { if (m.project) map[m.project] = m.id; });
+        setMicrositeByProject(map);
+      })
+      .catch(() => {});
+  }, []);
 
   async function remove() {
     setBusy(true);
@@ -83,6 +93,8 @@ export default function MyProjects() {
                     <div className="row" style={{ gap: 6 }}>
                       <Link to={`/project/${p.slug || p.id}`} className="btn btn-xs btn-outline"><Eye /></Link>
                       <Link to={`/dashboard/project/${p.id}/edit`} className="btn btn-xs btn-outline"><Edit /></Link>
+                      <Link to={micrositeByProject[p.id] ? `/dashboard/microsites/${micrositeByProject[p.id]}/build` : `/dashboard/microsites/new?projectId=${p.id}`}
+                            className="btn btn-xs btn-outline" title={micrositeByProject[p.id] ? 'Manage Microsite' : 'Create Microsite'}><Layers /></Link>
                       <button className="btn btn-xs btn-danger" onClick={() => setConfirm(p)}><Trash /></button>
                     </div>
                   </td>

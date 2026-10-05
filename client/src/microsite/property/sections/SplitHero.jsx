@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import { MapPin, Shield, Cube } from '../../../components/Icons.jsx';
-import { priceLabel, PURPOSE_LABEL, TYPE_LABEL } from '../../../utils/format.js';
+import { priceLabel, money, PURPOSE_LABEL, TYPE_LABEL } from '../../../utils/format.js';
 import ThemedButton from '../ThemedButton.jsx';
-import { headingFontClass } from '../theme.js';
+import { headingFontClass, priceDisplay } from '../theme.js';
 
 /** A bold two-panel hero — text on a solid brand-color panel, photo filling
  *  the other half — instead of text-over-photo. Structurally different from
@@ -11,7 +11,7 @@ import { headingFontClass } from '../theme.js';
 export default function SplitHero({ property: p, data = {}, settings = {}, theme }) {
   const bg = settings.backgroundImage || p.cover_image || p.images?.[0]?.url;
   const imageLeft = settings.imagePosition === 'left';
-  const price = priceLabel(p.purpose, p.price);
+  const price = priceDisplay(p, priceLabel, money);
   const address = [p.locality, p.city].filter(Boolean).join(', ');
 
   return (
@@ -69,7 +69,10 @@ export default function SplitHero({ property: p, data = {}, settings = {}, theme
         </motion.div>
       </div>
 
-      <div className={`relative min-h-[45vh] overflow-hidden ${imageLeft ? 'lg:order-1' : ''}`}>
+      <div
+        className={`relative min-h-[45vh] overflow-hidden ${imageLeft ? 'lg:order-1' : ''}`}
+        style={bg ? undefined : { background: `linear-gradient(135deg, ${theme.secondaryColor}, ${theme.primaryColor})` }}
+      >
         {bg && (
           <motion.img
             src={bg} alt={p.title}

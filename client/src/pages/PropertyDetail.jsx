@@ -7,6 +7,7 @@ import EnquiryForm from '../components/EnquiryForm.jsx';
 import TourEmbed from '../components/TourEmbed.jsx';
 import PropertyBot from '../components/PropertyBot.jsx';
 import Recommendations from '../components/bots/Recommendations.jsx';
+import MicrositeRenderer from '../microsite/property/MicrositeRenderer.jsx';
 import { Avatar, Crumbs, Notice, PageLoader } from '../components/ui.jsx';
 import {
   priceLabel, area, rupees, timeAgo, titleCase, PURPOSE_LABEL, TYPE_LABEL, ROLE_LABEL, shareUrl,
@@ -55,6 +56,8 @@ export default function PropertyDetail() {
   const [idx, setIdx] = useState(0);
   const [fav, setFav] = useState(false);
   const [activeMedia, setActiveMedia] = useState(null); // null | 'tour' | 'plan' | 'video'
+  // undefined = still checking, null = none published, object = render this instead
+  const [microsite, setMicrosite] = useState(undefined);
 
   useEffect(() => {
     let live = true;
@@ -68,6 +71,25 @@ export default function PropertyDetail() {
       .catch((e) => live && setError(errMsg(e, 'Property not found')));
     return () => { live = false; };
   }, [idOrSlug]);
+
+  // Fired in parallel with the property fetch above, not chained after it —
+  // an owner can publish a microsite for their listing; when they have, that
+  // fully replaces this page's own markup (see the early return below).
+  useEffect(() => {
+    let live = true;
+    setMicrosite(undefined);
+    api.get(`/microsites/for-property/${idOrSlug}`)
+      .then((r) => { if (live) setMicrosite(r.data.data); })
+      .catch(() => { if (live) setMicrosite(null); });
+    return () => { live = false; };
+  }, [idOrSlug]);
+
+  // The microsite brings its own navbar/footer — hide the site chrome (which
+  // App.jsx mounts outside this component, by URL alone) while it's showing.
+  useEffect(() => {
+    document.body.classList.toggle('ms-page-active', !!microsite);
+    return () => document.body.classList.remove('ms-page-active');
+  }, [microsite]);
 
   async function toggleFav() {
     if (!isAuthed) { toast.info('Please login to shortlist this property'); return; }
@@ -87,6 +109,28 @@ export default function PropertyDetail() {
     }
   }
 
+  // A published microsite for this listing fully replaces the rest of this
+  // page — checked in parallel with the property fetch above, so this can
+  // resolve and render before (or instead of) the plain layout below.
+  if (microsite) {
+    return (
+      <>
+        <MicrositeRenderer
+          property={microsite.property}
+          sections={microsite.sections}
+          theme={microsite.microsite.theme}
+          navbar={microsite.microsite.navbar}
+        />
+        <PropertyBot
+          propertyId={microsite.property.id}
+          title={microsite.property.title}
+          price={microsite.property.price}
+          purpose={microsite.property.purpose}
+        />
+      </>
+    );
+  }
+
   if (error) {
     return (
       <div className="container section">
@@ -95,7 +139,7 @@ export default function PropertyDetail() {
       </div>
     );
   }
-  if (!p) return <PageLoader label="Loading property…" />;
+  if (!p || microsite === undefined) return <PageLoader label="Loading property…" />;
 
   const images = p.images?.length ? p.images.map((i) => i.url) : [p.cover_image || FALLBACK];
   const price = priceLabel(p.purpose, p.price);

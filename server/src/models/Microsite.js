@@ -12,7 +12,12 @@ const navItemSchema = new mongoose.Schema(
 
 const micrositeSchema = new mongoose.Schema(
   {
-    property: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', required: true, unique: true, index: true },
+    // Exactly one of these is set, enforced at the route layer (not here) —
+    // a microsite is built for either a single property listing or a
+    // builder project, never both. `sparse` so multiple docs can have the
+    // other field null without tripping the unique index.
+    property: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', unique: true, sparse: true, index: true },
+    project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', unique: true, sparse: true, index: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     templateId: { type: String, enum: ['premium-luxury', 'modern-real-estate', 'lead-generation', 'editorial', 'custom'], default: 'custom' },
     status: { type: String, enum: ['draft', 'published'], default: 'draft' },

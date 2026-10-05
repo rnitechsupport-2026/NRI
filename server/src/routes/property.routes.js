@@ -598,7 +598,7 @@ router.post('/:id/ask', botLimiter, asyncHandler(async (req, res) => {
     .lean();
   if (!property) throw new HttpError(404, 'Property not found');
   const imageCount = await PropertyImage.countDocuments({ property: property._id });
-  const enriched = { ...property, image_count: imageCount };
+  const enriched = { ...shapeDoc(property), image_count: imageCount };
 
   try {
     const { answer } = await bot.ask(enriched, question, history || []);

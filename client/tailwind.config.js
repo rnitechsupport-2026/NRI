@@ -4,7 +4,11 @@ export default {
   // Preflight resets margins/typography globally, which would collide with
   // the rest of this app's hand-written CSS (globals.css). Tailwind is used
   // here only for the property microsite, as plain utility classes.
-  corePlugins: { preflight: false },
+  // `container` is also disabled: this app has its own hand-written `.container`
+  // class in globals.css (used by the navbar and every page), and Tailwind's
+  // built-in `.container` utility has the same class name — it was winning the
+  // cascade on pages that load the microsite bundle, shrinking the navbar's gutter.
+  corePlugins: { preflight: false, container: false },
   theme: {
     extend: {
       colors: {

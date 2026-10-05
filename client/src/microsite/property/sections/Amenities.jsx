@@ -14,7 +14,7 @@ export default function Amenities({ property: p, data = {}, settings = {}, theme
         <FadeIn>
           <h2 className={`${headingFontClass(theme)} mb-8 text-3xl font-semibold`}>{data.heading || 'Amenities'}</h2>
         </FadeIn>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           {amenities.map((a, i) => {
             const meta = amenityMeta(a);
             const Icon = meta.icon;

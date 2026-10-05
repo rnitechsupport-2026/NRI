@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { z } = require('zod');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const Project = require('../models/Project');
 const ProjectImage = require('../models/ProjectImage');
 const ProjectDocument = require('../models/ProjectDocument');
@@ -10,6 +11,7 @@ const Notification = require('../models/Notification');
 const { requireAuth, requireRole, requireApproved } = require('../middleware/auth');
 const { asyncHandler, makeSlug, nn, paginate, HttpError, toSnakeCase } = require('../utils/helpers');
 const { encryptToDisk, decryptFromDisk } = require('../utils/fileCrypto');
+const bot = require('../services/projectBot');
 
 function shapeProject(doc) {
   if (!doc) return null;
@@ -372,6 +374,72 @@ router.post('/:id/submit-verification', requireAuth, requireRole('builder', 'adm
   }
 
   res.json({ message: 'Submitted for verification', data: { verificationStatus: project.verificationStatus } });
+}));
+
+/* ------------------------------------------------------------- AI assistant */
+
+router.get('/meta/assistant', (_req, res) => {
+  res.json({ data: { enabled: bot.hasKey(), suggestions: bot.SUGGESTED } });
+});
+
+const botLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many assistant requests. Please try again in a few minutes.' },
+});
+
+router.get('/:id/summary', botLimiter, asyncHandler(async (req, res) => {
+  const project = await Project.findById(req.params.id)
+    .populate({ path: 'builder', select: 'name role companyName reraId experienceYears isVerified' })
+    .lean();
+  if (!project) throw new HttpError(404, 'Project not found');
+  const imageCount = await ProjectImage.countDocuments({ project: project._id });
+  const enriched = { ...shapeProject(project), image_count: imageCount };
+
+  if (project.aiSummary && req.query.refresh !== '1') {
+    return res.json({ data: { summary: project.aiSummary, cached: true, source: project.aiSummarySource, generated_at: project.aiSummaryAt } });
+  }
+
+  try {
+    const { summary, source } = await bot.summarise(enriched);
+    await Project.findByIdAndUpdate(project._id, { aiSummary: summary, aiSummaryAt: new Date(), aiSummarySource: source });
+    res.json({ data: { summary, cached: false, source } });
+  } catch (e) {
+    if (e.code === 'REFUSAL') throw new HttpError(422, 'The assistant could not summarise this project.');
+    console.error('[bot] project summary failed:', e.message);
+    res.json({ data: { summary: bot.templateSummary(enriched), cached: false, source: 'template' } });
+  }
+}));
+
+router.post('/:id/ask', botLimiter, asyncHandler(async (req, res) => {
+  const { question, history } = z.object({
+    question: z.string().min(2, 'Please type a question').max(500),
+    history: z.array(z.object({
+      role: z.enum(['user', 'assistant']),
+      content: z.string().max(4000),
+    })).max(20).optional(),
+  }).parse(req.body);
+
+  const project = await Project.findById(req.params.id)
+    .populate({ path: 'builder', select: 'name role companyName reraId experienceYears isVerified' })
+    .lean();
+  if (!project) throw new HttpError(404, 'Project not found');
+  const imageCount = await ProjectImage.countDocuments({ project: project._id });
+  const enriched = { ...shapeProject(project), image_count: imageCount };
+
+  try {
+    const { answer } = await bot.ask(enriched, question, history || []);
+    res.json({ data: { answer } });
+  } catch (e) {
+    if (e.code === 'NO_API_KEY') {
+      throw new HttpError(503, 'The AI assistant is not configured on this server. Add ANTHROPIC_API_KEY to server/.env to enable it.');
+    }
+    if (e.code === 'REFUSAL') throw new HttpError(422, 'The assistant could not answer that. Try rephrasing.');
+    console.error('[bot] project ask failed:', e.message);
+    throw new HttpError(502, 'The assistant is temporarily unavailable. Please try again.');
+  }
 }));
 
 module.exports = router;

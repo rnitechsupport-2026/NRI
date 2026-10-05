@@ -103,6 +103,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* A property page rendering a published microsite (see PropertyDetail.jsx)
+   brings its own navbar/footer — the site's own chrome, mounted outside
+   that component by App.jsx purely from the URL, needs to step aside. */
+body.ms-page-active .nav,
+body.ms-page-active footer.footer { display: none; }
+
 h1, h2, h3, h4, h5 {
   font-family: var(--font-head);
   color: var(--ink);

@@ -1,11 +1,11 @@
-import { priceLabel, rupees } from '../../../utils/format.js';
-import { toneStyle, headingFontClass } from '../theme.js';
+import { priceLabel, money, rupees } from '../../../utils/format.js';
+import { toneStyle, headingFontClass, priceDisplay } from '../theme.js';
 import ThemedButton from '../ThemedButton.jsx';
 import FadeIn from '../FadeIn.jsx';
 
 export default function Pricing({ property: p, data = {}, settings = {}, theme }) {
   const tone = settings.tone || 'dark';
-  const price = priceLabel(p.purpose, p.price);
+  const price = priceDisplay(p, priceLabel, money);
   const perArea = p.built_up_area ? `${rupees(Math.round(p.price / p.built_up_area))} / ${p.area_unit}` : null;
 
   return (
