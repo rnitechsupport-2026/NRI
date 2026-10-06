@@ -203,7 +203,7 @@ export default function ProjectDetail() {
               </div>
               {p.builder_about && <p className="small muted mt-2">{p.builder_about}</p>}
               <div className="stack mt-3" style={{ gap: 10 }}>
-                <a className="btn btn-dark btn-block" href={`tel:${p.builder_phone}`}><Phone /> {p.builder_phone}</a>
+                <a className="btn btn-dark btn-block" href={`tel:${p.builder_phone}`}><Phone /> Call Now</a>
                 <Link to={`/profile/${p.builder_id}`} className="btn btn-outline btn-sm btn-block">
                   View builder profile
                 </Link>

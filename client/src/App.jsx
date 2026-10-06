@@ -57,6 +57,7 @@ const ProjectForm = lazy(() => import('./pages/dashboard/ProjectForm.jsx'));
 const MyServices = lazy(() => import('./pages/dashboard/MyServices.jsx'));
 const ServiceForm = lazy(() => import('./pages/dashboard/ServiceForm.jsx'));
 const Visits = lazy(() => import('./pages/dashboard/Visits.jsx'));
+const Leads = lazy(() => import('./pages/dashboard/Leads.jsx'));
 const Favorites = lazy(() => import('./pages/dashboard/Favorites.jsx'));
 const Profile = lazy(() => import('./pages/dashboard/Profile.jsx'));
 const MyEnquiries = lazy(() => import('./pages/MyEnquiries.jsx'));
@@ -153,6 +154,7 @@ export default function App() {
                 <ProtectedRoute roles={['service', 'admin']}><RequireApproved><ServiceForm /></RequireApproved></ProtectedRoute>} />
               <Route path="service/:id/edit" element={
                 <ProtectedRoute roles={['service', 'admin']}><RequireApproved><ServiceForm /></RequireApproved></ProtectedRoute>} />
+              <Route path="leads" element={<Leads />} />
               <Route path="visits" element={<Visits />} />
               <Route path="favorites" element={<Favorites />} />
               <Route path="profile" element={<Profile />} />

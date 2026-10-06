@@ -28,7 +28,7 @@ export default function OwnerInfo({ property: p, data = {}, settings = {}, theme
           )}
         </div>
         {p.owner_phone && (
-          <ThemedButton theme={theme} href={`tel:${p.owner_phone}`} icon={Phone}>{p.owner_phone}</ThemedButton>
+          <ThemedButton theme={theme} href={`tel:${p.owner_phone}`} icon={Phone}>Call Now</ThemedButton>
         )}
       </FadeIn>
     </section>

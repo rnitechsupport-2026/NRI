@@ -101,7 +101,7 @@ export default function ServiceDetail() {
               </div>
 
               <a className="btn btn-dark btn-block mt-3" href={`tel:${s.provider_phone}`}>
-                <Phone /> {s.provider_phone}
+                <Phone /> Call Now
               </a>
             </div>
 

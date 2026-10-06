@@ -79,9 +79,18 @@ export const LEAD_STATUS = {
   new: { label: 'New', cls: 'badge-blue' },
   contacted: { label: 'Contacted', cls: 'badge-amber' },
   'visit-scheduled': { label: 'Visit Scheduled', cls: 'badge-gold' },
-  closed: { label: 'Closed', cls: 'badge-green' },
+  nurturing: { label: 'Nurturing', cls: 'badge-navy' },
+  negotiation: { label: 'Negotiation', cls: 'badge-brand' },
+  booked: { label: 'Booked', cls: 'badge-green' },
+  closed: { label: 'Closed', cls: 'badge-green' }, // legacy alias of 'booked'
   lost: { label: 'Lost', cls: 'badge-red' },
 };
+
+export const LEAD_BOARD_COLUMNS = ['new', 'contacted', 'visit-scheduled', 'nurturing', 'negotiation', 'booked'];
+/** Pre-pipeline leads were marked 'closed' as their terminal "won" state —
+ *  group those into the Booked column alongside new 'booked' leads rather
+ *  than giving legacy data its own dead-end column. */
+export const normalizeLeadStatus = (s) => (s === 'closed' ? 'booked' : s);
 
 export const AMENITY_LIST = [
   'Lift', 'Power Backup', 'Covered Parking', 'Security', 'CCTV', 'Gym',

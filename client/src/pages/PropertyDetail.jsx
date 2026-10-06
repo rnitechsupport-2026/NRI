@@ -399,7 +399,7 @@ export default function PropertyDetail() {
 
               <div className="stack mt-3" style={{ gap: 10 }}>
                 <a className="btn btn-dark btn-block" href={`tel:${p.owner_phone}`}>
-                  <Phone /> {p.owner_phone}
+                  <Phone /> Call Now
                 </a>
                 <Link to={`/profile/${p.owner_id}`} className="btn btn-outline btn-block btn-sm">
                   View all listings by this {ROLE_LABEL[p.owner_role].toLowerCase()}

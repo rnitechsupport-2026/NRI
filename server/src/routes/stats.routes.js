@@ -60,8 +60,8 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req, res) => {
 
   // These four are all independent of each other — only leadCounts below
   // actually depends on topListings, so it's the one query left sequential.
-  // No name/phone-bearing lead list here — enquiries are managed centrally
-  // now (see admin.routes.js), so listers only get aggregate counts.
+  // This is an aggregate-only summary for the dashboard overview; the full
+  // name/phone-bearing lead list lives at GET /leads/mine (lead.routes.js).
   const [leadsByStatus, topListings, trend, weekRaw] = await Promise.all([
     Lead.aggregate([
       { $match: { receiver: uid } },

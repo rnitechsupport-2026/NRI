@@ -36,6 +36,7 @@ export default function DashSidebar({ user, mobileOpen, onClose }) {
       { to: '/dashboard/services', label: 'My Services', icon: Wrench },
       { to: '/dashboard/service/new', label: 'Add Service', icon: Plus, locked: isPending },
     ] : []),
+    ...(user.role !== 'employee' ? [{ to: '/dashboard/leads', label: 'Leads', icon: Inbox }] : []),
     { to: '/dashboard/visits', label: 'Site Visits', icon: Calendar },
     { to: '/dashboard/favorites', label: 'Shortlist', icon: Heart },
   ];

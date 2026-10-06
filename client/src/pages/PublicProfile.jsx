@@ -62,7 +62,7 @@ export default function PublicProfile() {
               </div>
             </div>
             <div className="stack" style={{ minWidth: 190 }}>
-              <a className="btn btn-primary" href={`tel:${u.phone}`}><Phone /> {u.phone}</a>
+              <a className="btn btn-primary" href={`tel:${u.phone}`}><Phone /> Call Now</a>
               <a className="btn btn-light" href={`mailto:${u.email}`}><Mail /> Email</a>
             </div>
           </div>

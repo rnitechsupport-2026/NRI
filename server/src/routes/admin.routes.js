@@ -16,6 +16,7 @@ const ServiceProviderDocument = require('../models/ServiceProviderDocument');
 const { getRule, qualificationRequired } = require('../config/serviceCategoryRules');
 const AuditLog = require('../models/AuditLog');
 const Notification = require('../models/Notification');
+const leadNotes = require('../services/leadNotes');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { asyncHandler, nn, paginate, HttpError } = require('../utils/helpers');
 const { decryptFromDisk, maskValue } = require('../utils/fileCrypto');
@@ -495,9 +496,15 @@ router.delete('/services/:id', asyncHandler(async (req, res) => {
 }));
 
 /* ==================================================================== leads */
-/* Enquiries are managed centrally here — Admin/Employee (per their assigned
-   portals) see every lead, change its status, and assign it to a specific
-   lister. Listers themselves never see this directly (see lead.routes.js). */
+/* Admin/Employee (per their assigned portals) see every lead across a
+   portal, change its status, and assign it to a specific lister. Listers
+   now also get a self-service view of their OWN leads at GET /leads/mine
+   in lead.routes.js — this stays the cross-portal, audited surface. */
+
+const STAGE_LABEL = {
+  new: 'New', contacted: 'Contacted', 'visit-scheduled': 'Visit Scheduled',
+  nurturing: 'Nurturing', negotiation: 'Negotiation', booked: 'Booked', lost: 'Lost',
+};
 
 router.get('/leads', asyncHandler(async (req, res) => {
   const scope = resolvePortalScope(req, req.query.portal);
@@ -533,6 +540,10 @@ router.get('/leads', asyncHandler(async (req, res) => {
       assignedTo: l.assignedTo ? String(l.assignedTo._id) : null,
       assignedToName: l.assignedTo?.name || null,
       about: l.property?.title || l.project?.name || l.service?.title || null,
+      bookingAmount: l.bookingAmount ?? null,
+      bookingDate: l.bookingDate || null,
+      notesCount: (l.notes || []).length,
+      lastNote: l.notes?.length ? l.notes[l.notes.length - 1].text : null,
     })),
     meta: { page, limit, total },
   });
@@ -540,7 +551,7 @@ router.get('/leads', asyncHandler(async (req, res) => {
 
 router.patch('/leads/:id', asyncHandler(async (req, res) => {
   const d = z.object({
-    status: z.enum(['new', 'contacted', 'visit-scheduled', 'closed', 'lost']).optional(),
+    status: z.enum(['new', 'contacted', 'visit-scheduled', 'nurturing', 'negotiation', 'booked', 'closed', 'lost']).optional(),
     assigned_to: z.string().nullable().optional(),
   }).parse(req.body);
   if (d.status === undefined && d.assigned_to === undefined) throw new HttpError(400, 'Nothing to update');
@@ -567,6 +578,13 @@ router.patch('/leads/:id', asyncHandler(async (req, res) => {
   }
 
   await Lead.findByIdAndUpdate(req.params.id, patch);
+  if (d.status !== undefined) {
+    await leadNotes.addNote(req.params.id, {
+      authorId: req.user._id,
+      text: `Moved to ${STAGE_LABEL[d.status] || d.status} (by admin)`,
+      statusAfter: d.status,
+    });
+  }
   await writeAudit(req, {
     targetUser: lead.receiver,
     action: d.assigned_to !== undefined ? 'lead_assign' : 'lead_status',
@@ -575,6 +593,106 @@ router.patch('/leads/:id', asyncHandler(async (req, res) => {
     reason: `lead ${req.params.id}`,
   });
   res.json({ message: 'Enquiry updated' });
+}));
+
+function shapeAdminNote(n) {
+  return {
+    id: String(n._id),
+    text: n.text,
+    authorId: n.author?._id ? String(n.author._id) : (n.author ? String(n.author) : null),
+    authorName: n.author?.name || null,
+    temperature: n.temperature || null,
+    statusAfter: n.statusAfter || null,
+    createdAt: n.createdAt,
+  };
+}
+
+router.get('/leads/:id', asyncHandler(async (req, res) => {
+  const lead = await Lead.findById(req.params.id)
+    .populate('property', 'title slug')
+    .populate('project', 'name slug')
+    .populate('service', 'title')
+    .populate('receiver', 'name role')
+    .populate('assignedTo', 'name role')
+    .populate({ path: 'notes.author', select: 'name' })
+    .lean();
+  if (!lead) throw new HttpError(404, 'Lead not found');
+  const receiver = await User.findById(lead.receiver).select('role').lean();
+  resolvePortalScope(req, receiver?.role);
+
+  res.json({
+    data: {
+      id: String(lead._id),
+      name: lead.name,
+      phone: lead.phone,
+      email: lead.email,
+      message: lead.message,
+      status: lead.status,
+      temperature: lead.temperature,
+      score: lead.score,
+      source: lead.source,
+      createdAt: lead.createdAt,
+      receiverId: lead.receiver ? String(lead.receiver._id) : null,
+      receiverName: lead.receiver?.name,
+      receiverRole: lead.receiver?.role,
+      assignedTo: lead.assignedTo ? String(lead.assignedTo._id) : null,
+      assignedToName: lead.assignedTo?.name || null,
+      about: lead.property?.title || lead.project?.name || lead.service?.title || null,
+      bookingAmount: lead.bookingAmount ?? null,
+      bookingDate: lead.bookingDate || null,
+      bookingUnit: lead.bookingUnit || null,
+      bookingNotes: lead.bookingNotes || null,
+      bookedAt: lead.bookedAt || null,
+      notes: (lead.notes || []).map(shapeAdminNote).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    },
+  });
+}));
+
+router.post('/leads/:id/notes', asyncHandler(async (req, res) => {
+  const d = z.object({
+    text: z.string().min(2, 'Add a note').max(1000),
+    temperature: z.enum(['hot', 'warm', 'cold']).optional(),
+  }).parse(req.body);
+
+  const lead = await Lead.findById(req.params.id).select('receiver').lean();
+  if (!lead) throw new HttpError(404, 'Lead not found');
+  const receiver = await User.findById(lead.receiver).select('role').lean();
+  resolvePortalScope(req, receiver?.role);
+
+  await leadNotes.addNote(lead._id, { authorId: req.user._id, text: d.text, temperature: d.temperature });
+  await writeAudit(req, { targetUser: lead.receiver, action: 'lead_note', reason: `lead ${req.params.id}` });
+  res.status(201).json({ message: 'Note added' });
+}));
+
+router.post('/leads/:id/book', asyncHandler(async (req, res) => {
+  const d = z.object({
+    amount: z.coerce.number().min(0, 'Enter the booking amount'),
+    booking_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
+    unit: z.string().max(120).optional().or(z.literal('')),
+    notes: z.string().max(500).optional().or(z.literal('')),
+  }).parse(req.body);
+
+  const lead = await Lead.findById(req.params.id).select('receiver status').lean();
+  if (!lead) throw new HttpError(404, 'Lead not found');
+  const receiver = await User.findById(lead.receiver).select('role').lean();
+  resolvePortalScope(req, receiver?.role);
+  if (lead.status === 'booked') throw new HttpError(409, 'This lead is already booked');
+
+  await Lead.findByIdAndUpdate(lead._id, {
+    status: 'booked',
+    bookingAmount: d.amount,
+    bookingDate: d.booking_date ? new Date(d.booking_date) : new Date(),
+    bookingUnit: nn(d.unit),
+    bookingNotes: nn(d.notes),
+    bookedAt: new Date(),
+  });
+  await leadNotes.addNote(lead._id, {
+    authorId: req.user._id,
+    text: `Booked — ₹${Number(d.amount).toLocaleString('en-IN')}${d.unit ? ` (Unit ${d.unit})` : ''}`,
+    statusAfter: 'booked',
+  });
+  await writeAudit(req, { targetUser: lead.receiver, action: 'lead_book', newStatus: 'booked', reason: `lead ${req.params.id}` });
+  res.json({ message: 'Lead marked as booked' });
 }));
 
 /* ======================================================= agent verification */

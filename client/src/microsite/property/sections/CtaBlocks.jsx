@@ -30,7 +30,7 @@ export function CallCta({ property: p, data = {}, settings = {}, theme }) {
   return (
     <CtaShell id="ms-call-cta" data={data} settings={settings} theme={theme} icon={Phone}
               defaultHeading="Have questions?" defaultBody="Call us directly for a quick answer.">
-      <ThemedButton theme={theme} href={`tel:${p.owner_phone}`} icon={Phone}>{data.buttonText || `Call ${p.owner_phone}`}</ThemedButton>
+      <ThemedButton theme={theme} href={`tel:${p.owner_phone}`} icon={Phone}>{data.buttonText || 'Call Now'}</ThemedButton>
     </CtaShell>
   );
 }

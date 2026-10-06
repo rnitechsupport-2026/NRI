@@ -12,7 +12,11 @@ const leadSchema = new mongoose.Schema(
     phone: { type: String, required: true, trim: true, maxlength: 20 },
     message: { type: String },
     source: { type: String, enum: ['property', 'project', 'service', 'contact'], default: 'property' },
-    status: { type: String, enum: ['new', 'contacted', 'visit-scheduled', 'closed', 'lost'], default: 'new' },
+    status: {
+      type: String,
+      enum: ['new', 'contacted', 'visit-scheduled', 'nurturing', 'negotiation', 'booked', 'closed', 'lost'],
+      default: 'new',
+    },
     score: { type: Number, default: 0, min: 0, max: 100 },
     temperature: { type: String, enum: ['hot', 'warm', 'cold'], default: 'cold' },
     scoreReasons: { type: [String], default: [] },
@@ -28,6 +32,21 @@ const leadSchema = new mongoose.Schema(
     finance: { type: String, enum: ['loan', 'self', 'not-sure'] },
     lastFollowupAt: { type: Date },
     followupCount: { type: Number, default: 0, min: 0 },
+    bookingAmount: { type: Number, min: 0 },
+    bookingDate: { type: Date },
+    bookingUnit: { type: String, trim: true, maxlength: 120 },
+    bookingNotes: { type: String, trim: true, maxlength: 500 },
+    bookedAt: { type: Date },
+    notes: {
+      type: [{
+        text: { type: String, required: true, trim: true, maxlength: 1000 },
+        author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        temperature: { type: String, enum: ['hot', 'warm', 'cold'] },
+        statusAfter: { type: String },
+        createdAt: { type: Date, default: Date.now },
+      }],
+      default: [],
+    },
   },
   { timestamps: true }
 );

@@ -1120,6 +1120,13 @@ tr.row-hot:hover { background: #fff5f1; }
 .visit-title:hover { color: var(--brand-600); }
 .visit-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* ------------------------------------------------------------ CRM lead board */
+.lead-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; }
+.lead-col { flex: 0 0 280px; display: flex; flex-direction: column; gap: 10px; }
+.lead-col-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.lead-card { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.lead-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
 /* recommendation card reason */
 .rec { display: flex; flex-direction: column; }
 .rec-why {
