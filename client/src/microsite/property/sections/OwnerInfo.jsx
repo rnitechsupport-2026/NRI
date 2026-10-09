@@ -1,36 +1,33 @@
 import { Shield, Phone } from '../../../components/Icons.jsx';
 import { Avatar } from '../../../components/ui.jsx';
 import { ROLE_LABEL } from '../../../utils/format.js';
-import { toneStyle, headingFontClass } from '../theme.js';
+import Section from '../Section.jsx';
+import Card from '../Card.jsx';
 import ThemedButton from '../ThemedButton.jsx';
-import FadeIn from '../FadeIn.jsx';
+import { Stagger } from '../motion.jsx';
 
-export default function OwnerInfo({ property: p, data = {}, settings = {}, theme }) {
+export default function OwnerInfo({ anchorId = 'ms-owner', property: p, data = {}, settings = {} }) {
   if (!p.owner_name) return null;
   const tone = settings.tone || 'light';
 
   return (
-    <section id="ms-owner" className="px-6" style={{ ...toneStyle(theme, tone), paddingTop: 'var(--ms-pad-y)', paddingBottom: 'var(--ms-pad-y)' }}>
-      <FadeIn className="mx-auto flex max-w-3xl flex-col items-center gap-4 text-center">
-        <h2 className={`${headingFontClass(theme)} text-3xl font-semibold`}>{data.heading || 'Listed By'}</h2>
-        <Avatar src={p.owner_avatar} name={p.owner_name} size="avatar-lg"
-                style={{ width: 68, height: 68, boxShadow: `0 0 0 4px ${theme.secondaryColor}33` }} />
-        <div>
-          <div className="text-lg font-semibold">{p.owner_company || p.owner_name}</div>
-          <div className="text-sm opacity-70">
-            {ROLE_LABEL[p.owner_role]}
-            {p.owner_experience ? ` · ${p.owner_experience} yrs experience` : ''}
+    <Section id={anchorId} tone={tone} width="max-w-4xl">
+      <Stagger>
+        <Card hover={false} className="flex flex-col items-center gap-6 p-7 text-center sm:flex-row sm:p-10 sm:text-left">
+          <Avatar src={p.owner_avatar} name={p.owner_name} size="avatar-lg"
+                  style={{ width: 96, height: 96, flexShrink: 0, boxShadow: '0 0 0 4px var(--ms-card), 0 0 0 6px var(--ms-accent)' }} />
+          <div className="flex min-w-0 flex-1 flex-col items-center gap-2 sm:items-start">
+            <span className="ms-eyebrow">{data.heading || 'Listed By'}</span>
+            <h2 className="ms-h3">{p.owner_company || p.owner_name}</h2>
+            <p className="ms-muted text-sm">
+              {ROLE_LABEL[p.owner_role]}
+              {p.owner_experience ? ` · ${p.owner_experience} yrs experience` : ''}
+            </p>
+            {p.owner_verified && <span className="ms-chip"><Shield style={{ width: 13, height: 13 }} /> Verified</span>}
           </div>
-          {p.owner_verified && (
-            <span className="mt-2 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium" style={{ background: 'rgba(127,127,127,0.12)' }}>
-              <Shield style={{ width: 12, height: 12 }} /> Verified
-            </span>
-          )}
-        </div>
-        {p.owner_phone && (
-          <ThemedButton theme={theme} href={`tel:${p.owner_phone}`} icon={Phone}>Call Now</ThemedButton>
-        )}
-      </FadeIn>
-    </section>
+          {p.owner_phone && <ThemedButton href={`tel:${p.owner_phone}`} icon={Phone}>Call Now</ThemedButton>}
+        </Card>
+      </Stagger>
+    </Section>
   );
 }

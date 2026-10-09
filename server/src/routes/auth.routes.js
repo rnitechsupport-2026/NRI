@@ -4,6 +4,16 @@ const { z } = require('zod');
 const User = require('../models/User');
 const { signToken, requireAuth } = require('../middleware/auth');
 const { asyncHandler, makeSlug, nn, parseJson, paginate, HttpError, toSnakeCase } = require('../utils/helpers');
+const Notification = require('../models/Notification');
+const { scopePortals, reviewersFor } = require('../services/staffScope');
+
+/** The logged-in user as the client gets it. Employees also get
+ *  `scope_portals`: the user types they have anyone assigned in. */
+async function sessionUser(doc) {
+  const safe = shapeUser(doc);
+  if (safe.role === 'employee') safe.scope_portals = await scopePortals(doc.toObject ? doc.toObject() : doc);
+  return safe;
+}
 
 const ROLES = ['owner', 'buyer', 'agent', 'builder', 'service'];
 
@@ -50,12 +60,23 @@ router.post('/register', asyncHandler(async (req, res) => {
     serviceCategory: nn(data.service_category),
     experienceYears: nn(data.experience_years),
     city: nn(data.city),
-    // Agent / builder / service accounts need admin sign-off before they can
-    // post listings — owners are low-risk and stay auto-approved.
-    approvalStatus: ['agent', 'builder', 'service'].includes(data.role) ? 'pending' : 'approved',
+    // Every lister account — owner, agent, builder, service — starts under
+    // verification and cannot post until the employee assigned to them (or an
+    // admin) approves it. Buyers have nothing to post, so nothing to verify.
+    approvalStatus: data.role === 'buyer' ? 'approved' : 'pending',
   });
 
-  const safe = shapeUser(user);
+  if (user.approvalStatus === 'pending') {
+    const reviewers = await reviewersFor(user);
+    await Notification.insertMany(reviewers.map((r) => ({
+      user: r._id, kind: 'system',
+      title: `New ${user.role} registration: ${user.name}`,
+      body: 'Waiting for verification.',
+      link: `/dashboard/admin/users/${user._id}`,
+    })));
+  }
+
+  const safe = await sessionUser(user);
   res.status(201).json({ token: signToken(user), user: safe });
 }));
 
@@ -79,13 +100,13 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   await User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() });
   const fresh = await User.findById(user._id).select('-passwordHash').lean();
-  const safe = shapeUser(fresh || user);
+  const safe = await sessionUser(fresh || user);
   res.json({ token: signToken(user), user: safe });
 }));
 
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select('-passwordHash').lean();
-  res.json({ user: shapeUser(user) });
+  res.json({ user: await sessionUser(user) });
 }));
 
 router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
@@ -128,7 +149,8 @@ router.put('/password', requireAuth, asyncHandler(async (req, res) => {
   const ok = await bcrypt.compare(current_password, user.passwordHash);
   if (!ok) throw new HttpError(400, 'Current password is incorrect');
 
-  await User.findByIdAndUpdate(req.user._id, { passwordHash: bcrypt.hashSync(new_password, 10) });
+  if (current_password === new_password) throw new HttpError(400, 'Choose a password different from the current one');
+  await User.findByIdAndUpdate(req.user._id, { passwordHash: bcrypt.hashSync(new_password, 10), mustChangePassword: false });
   res.json({ message: 'Password updated' });
 }));
 

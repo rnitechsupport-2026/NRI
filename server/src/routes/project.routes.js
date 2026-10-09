@@ -362,7 +362,7 @@ router.post('/:id/submit-verification', requireAuth, requireRole('builder', 'adm
   await project.save();
 
   const reviewers = await User.find({
-    $or: [{ role: 'admin' }, { role: 'employee', managedPortals: 'builder' }],
+    $or: [{ role: 'admin' }, { role: 'employee', managedPortals: 'builder' }, { role: 'employee', assignedUsers: req.user._id }],
   }).select('_id').lean();
   for (const r of reviewers) {
     await Notification.create({

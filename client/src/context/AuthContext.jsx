@@ -56,7 +56,10 @@ export function AuthProvider({ children }) {
     isAdmin: !!user && user.role === 'admin',
     isEmployee: !!user && user.role === 'employee',
     isPending: !!user && user.approval_status === 'pending',
-    managedPortals: (user && user.managed_portals) || [],
+    // The user types an employee has anyone assigned in — whole types plus the
+    // types of users assigned to them one by one (worked out by the server).
+    managedPortals: (user && (user.scope_portals || user.managed_portals)) || [],
+    mustChangePassword: !!user && !!user.must_change_password,
   }), [user, ready, login, register, logout, updateProfile]);
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

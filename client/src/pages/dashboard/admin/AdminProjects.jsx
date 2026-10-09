@@ -6,11 +6,13 @@ import { useToast } from '../../../context/ToastContext.jsx';
 import { Empty, Modal, PageLoader } from '../../../components/ui.jsx';
 import { money, timeAgo, titleCase } from '../../../utils/format.js';
 import { Building, Eye, Trash, Shield, Star, Alert } from '../../../components/Icons.jsx';
+import { useStaffBase } from '../../../staff/staffBase.js';
 
 const STATUSES = ['upcoming', 'ongoing', 'completed'];
 const VERIF_CLS = { not_submitted: 'badge-outline', submitted: 'badge-blue', under_review: 'badge-amber', verified: 'badge-green', rejected: 'badge-red' };
 
 export default function AdminProjects() {
+  const base = useStaffBase();
   const { isAdmin, managedPortals } = useAuth();
   const toast = useToast();
   const hasAccess = isAdmin || managedPortals.includes('builder');
@@ -104,7 +106,7 @@ export default function AdminProjects() {
                   <td>
                     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                       <Link to={`/project/${p.slug || p.id}`} className="btn btn-xs btn-outline" title="View"><Eye /></Link>
-                      <Link to={`/dashboard/admin/projects/${p.id}/verification`} className="btn btn-xs btn-primary">Review</Link>
+                      <Link to={`${base}/projects/${p.id}/verification`} className="btn btn-xs btn-primary">Review</Link>
                       <button className="btn btn-xs btn-outline" onClick={() => toggleFeature(p)}>
                         {p.isFeatured ? 'Unfeature' : 'Feature'}
                       </button>

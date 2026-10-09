@@ -31,6 +31,13 @@
 .ms-root button { font: inherit; cursor: pointer; }
 .ms-root img { max-width: 100%; display: block; }
 
+/* Navbar links jump to section ids — keep the target clear of the sticky bar. */
+.ms-root section[id] { scroll-margin-top: 64px; }
+
+/* The hero's photo track scrolls sideways but shouldn't show a scrollbar. */
+.ms-noscrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.ms-noscrollbar::-webkit-scrollbar { display: none; }
+
 .ms-serif { font-family: 'Playfair Display', serif; }
 
 /* thin gold scrollbar accents used inside horizontal scroll sections */

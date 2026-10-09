@@ -14,7 +14,7 @@ function shapePublicUser(doc) {
 
 router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, offset } = paginate(req.query);
-  const filter = { status: 'active', role: { $ne: 'admin' } };
+  const filter = { status: 'active', role: { $nin: ['admin', 'employee'] } };
   if (req.query.role) filter.role = req.query.role;
   if (req.query.city) filter.city = req.query.city;
   if (req.query.verified === 'true') filter.isVerified = true;

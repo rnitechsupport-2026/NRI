@@ -5,11 +5,13 @@ import { useToast } from '../../../context/ToastContext.jsx';
 import { PageLoader, Notice } from '../../../components/ui.jsx';
 import { timeAgo, titleCase, shortDate } from '../../../utils/format.js';
 import { ChevronLeft, Shield, Document, Eye, Check, X, Clock } from '../../../components/Icons.jsx';
+import { useStaffBase } from '../../../staff/staffBase.js';
 
 const TRACK_CLS = { not_submitted: 'badge-outline', submitted: 'badge-blue', under_review: 'badge-amber', verified: 'badge-green', rejected: 'badge-red', expired: 'badge-red' };
 const DOC_LABEL = { pan: 'PAN card', coi_incorporation: 'Certificate of Incorporation', gst_certificate: 'GST certificate', partnership_deed: 'Partnership deed', director_id: 'Director ID', other: 'Document' };
 
 export default function AdminBuilderDetail() {
+  const base = useStaffBase();
   const { id } = useParams();
   const toast = useToast();
   const [data, setData] = useState(null);
@@ -79,7 +81,7 @@ export default function AdminBuilderDetail() {
 
   return (
     <div className="stack" style={{ gap: 20 }}>
-      <Link to="/dashboard/admin/builders" className="row" style={{ gap: 6, width: 'fit-content' }}>
+      <Link to={`${base}/builders`} className="row" style={{ gap: 6, width: 'fit-content' }}>
         <ChevronLeft style={{ width: 16, height: 16 }} /> <span className="small">Back to applications</span>
       </Link>
 

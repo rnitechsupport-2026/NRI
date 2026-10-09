@@ -33,6 +33,9 @@ export default function ImagePicker({ value = [], onChange, max = 12 }) {
 
   function addUrl(e) {
     e.preventDefault();
+    // This picker sits inside the listing form — without this, adding a URL
+    // would bubble up and submit the whole listing.
+    e.stopPropagation();
     const clean = url.trim();
     if (!clean) return;
     if (!/^https?:\/\//i.test(clean)) { toast.error('Enter a full image URL starting with https://'); return; }

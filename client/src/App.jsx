@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import Footer from './components/Footer.jsx';
 import ScrollToTop from './components/ScrollToTop.jsx';
@@ -49,6 +49,8 @@ const DashboardLayout = lazy(() => import('./pages/dashboard/DashboardLayout.jsx
 const Overview = lazy(() => import('./pages/dashboard/Overview.jsx'));
 const MyProperties = lazy(() => import('./pages/dashboard/MyProperties.jsx'));
 const PropertyForm = lazy(() => import('./pages/dashboard/PropertyForm.jsx'));
+const PropertyMappingPage = lazy(() => import('./plotmap/pages/PropertyMappingPage.jsx'));
+const EmbeddedMap = lazy(() => import('./plotmap/pages/EmbeddedMap.jsx'));
 const MyMicrosites = lazy(() => import('./pages/dashboard/MyMicrosites.jsx'));
 const ChooseTemplate = lazy(() => import('./pages/dashboard/microsite/ChooseTemplate.jsx'));
 const MicrositeBuilder = lazy(() => import('./pages/dashboard/microsite/MicrositeBuilder.jsx'));
@@ -65,20 +67,29 @@ const MyEnquiries = lazy(() => import('./pages/MyEnquiries.jsx'));
 const AdminOverview = lazy(() => import('./pages/dashboard/admin/AdminOverview.jsx'));
 const AdminEmployees = lazy(() => import('./pages/dashboard/admin/AdminEmployees.jsx'));
 const AdminUsers = lazy(() => import('./pages/dashboard/admin/AdminUsers.jsx'));
+const AdminUserDetail = lazy(() => import('./pages/dashboard/admin/AdminUserDetail.jsx'));
 const AdminProperties = lazy(() => import('./pages/dashboard/admin/AdminProperties.jsx'));
 const AdminProjects = lazy(() => import('./pages/dashboard/admin/AdminProjects.jsx'));
 const AdminServices = lazy(() => import('./pages/dashboard/admin/AdminServices.jsx'));
 const AdminLeads = lazy(() => import('./pages/dashboard/admin/AdminLeads.jsx'));
 const AdminMicrosites = lazy(() => import('./pages/dashboard/admin/AdminMicrosites.jsx'));
 
+// Staff Portal — its own sign-in and shell; the review pages inside are the
+// same ones the admin dashboard uses.
+const StaffLogin = lazy(() => import('./staff/StaffLogin.jsx'));
+const StaffLayout = lazy(() => import('./staff/StaffLayout.jsx'));
+const StaffDashboard = lazy(() => import('./staff/StaffDashboard.jsx'));
+const StaffProfile = lazy(() => import('./staff/StaffProfile.jsx'));
+
 export default function App() {
   // The dashboard is its own app shell (fixed sidebar + topbar) — the
   // marketing site's navbar/footer would just stack a second header above it.
   const pathname = useLocation().pathname;
-  const isDashboard = pathname.startsWith('/dashboard');
+  const isDashboard = pathname.startsWith('/dashboard') || pathname === '/staff' || pathname.startsWith('/staff/');
   // The microsite is a full-bleed experience with its own sticky nav — the
   // marketing site's Navbar/Footer would double up on chrome.
-  const isMicrosite = pathname === '/property-microsite' || pathname.startsWith('/site/');
+  // …and so is an embedded map, which runs inside another website's iframe.
+  const isMicrosite = pathname === '/property-microsite' || pathname.startsWith('/site/') || pathname.startsWith('/embed/');
 
   return (
     <>
@@ -104,6 +115,7 @@ export default function App() {
                 with the real, data-driven property detail page above. */}
             <Route path="/property-microsite" element={<PropertyMicrosite />} />
             <Route path="/site/:slug" element={<PublicMicrosite />} />
+            <Route path="/embed/map/:propertyId" element={<EmbeddedMap />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/project/:idOrSlug" element={<ProjectDetail />} />
 
@@ -126,6 +138,13 @@ export default function App() {
               <ProtectedRoute><div className="container section"><Profile /></div></ProtectedRoute>} />
             <Route path="/account/enquiries" element={
               <ProtectedRoute><MyEnquiries /></ProtectedRoute>} />
+
+            {/* The plot / flat mapping editor is a full-screen tool, so it sits
+                beside the dashboard shell rather than inside it. */}
+            <Route path="/dashboard/property/:id/mapping" element={
+              <ProtectedRoute roles={['owner', 'agent', 'builder', 'admin', 'employee']} redirectTo="/">
+                <RequireApproved><PropertyMappingPage /></RequireApproved>
+              </ProtectedRoute>} />
 
             <Route
               path="/dashboard"
@@ -171,6 +190,8 @@ export default function App() {
                 <ProtectedRoute roles={['admin']}><AdminEmployees /></ProtectedRoute>} />
               <Route path="admin/users" element={
                 <ProtectedRoute roles={['admin', 'employee']}><AdminUsers /></ProtectedRoute>} />
+              <Route path="admin/users/:id" element={
+                <ProtectedRoute roles={['admin', 'employee']}><AdminUserDetail /></ProtectedRoute>} />
               <Route path="admin/properties" element={
                 <ProtectedRoute roles={['admin', 'employee']}><AdminProperties /></ProtectedRoute>} />
               <Route path="admin/projects" element={
@@ -197,6 +218,31 @@ export default function App() {
                 <ProtectedRoute roles={['admin', 'employee']}><AdminServiceProviderDetail /></ProtectedRoute>} />
               <Route path="admin/audit-log" element={
                 <ProtectedRoute roles={['admin', 'employee']}><AdminAuditLog /></ProtectedRoute>} />
+            </Route>
+
+            <Route path="/staff/login" element={<StaffLogin />} />
+            {/* StaffLayout is its own guard: employees only, everyone else is sent away */}
+            <Route path="/staff" element={<StaffLayout />}>
+              <Route index element={<StaffDashboard />} />
+              <Route path="users" element={<AdminUsers key="all" />} />
+              <Route path="users/:id" element={<AdminUserDetail />} />
+              <Route path="user-verification" element={<AdminUsers key="queue" queue />} />
+              <Route path="properties-under-verification" element={<AdminProperties key="queue" queue />} />
+              <Route path="properties" element={<AdminProperties key="all" />} />
+              <Route path="leads" element={<AdminLeads />} />
+              <Route path="history" element={<AdminAuditLog />} />
+              <Route path="audit-log" element={<AdminAuditLog />} />
+              <Route path="profile" element={<StaffProfile />} />
+              {/* document review for agents / builders / service providers, reached from a user's page */}
+              <Route path="agents" element={<AdminAgentApplications />} />
+              <Route path="agents/:id" element={<AdminAgentDetail />} />
+              <Route path="builders" element={<AdminBuilderApplications />} />
+              <Route path="builders/:id" element={<AdminBuilderDetail />} />
+              <Route path="service-providers" element={<AdminServiceApplications />} />
+              <Route path="service-providers/:id" element={<AdminServiceProviderDetail />} />
+              <Route path="projects" element={<AdminProjects />} />
+              <Route path="projects/:id/verification" element={<AdminProjectVerification />} />
+              <Route path="*" element={<Navigate to="/staff" replace />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

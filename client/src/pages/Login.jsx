@@ -38,7 +38,7 @@ export default function Login() {
   // Buyers have no dashboard shell — land them on the homepage instead,
   // unless the caller asked for somewhere specific via ?next=.
   const explicitNext = params.get('next');
-  const destFor = (u) => explicitNext || (u.role === 'buyer' ? '/' : '/dashboard');
+  const destFor = (u) => (u.role === 'employee' ? '/staff' : explicitNext || (u.role === 'buyer' ? '/' : '/dashboard'));
   const info = roleInfo(role);
 
   useEffect(() => { if (isAuthed) nav(destFor(user), { replace: true }); }, [isAuthed, user, nav, explicitNext]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -190,7 +190,7 @@ export default function Login() {
               <button className="btn btn-xs btn-dark" onClick={useDemo}>Use</button>
             </div>
             <p className="tiny muted">
-              {staffMode ? 'Platform admin demo login — employee accounts are added by an admin.'
+              {staffMode ? 'Platform admin demo login — employees sign in at /staff/login.'
                          : 'Switch the tab above to try the owner, agent, builder or services dashboard.'}
             </p>
           </div>

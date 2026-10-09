@@ -171,7 +171,7 @@ router.post('/submit-for-review', asyncHandler(async (req, res) => {
   await profile.save();
 
   const reviewers = await User.find({
-    $or: [{ role: 'admin' }, { role: 'employee', managedPortals: 'agent' }],
+    $or: [{ role: 'admin' }, { role: 'employee', managedPortals: 'agent' }, { role: 'employee', assignedUsers: req.user._id }],
   }).select('_id').lean();
   for (const r of reviewers) {
     await Notification.create({

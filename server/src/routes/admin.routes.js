@@ -21,32 +21,32 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { asyncHandler, nn, paginate, HttpError } = require('../utils/helpers');
 const { decryptFromDisk, maskValue } = require('../utils/fileCrypto');
 
-const PORTALS = ['owner', 'buyer', 'agent', 'builder', 'service'];
+const {
+  MANAGED_ROLES, DEFAULT_EMPLOYEE_PASSWORD,
+  assertCanManage, assertCanManageId, managedUserQuery, managedUserIds, assertPortalAccess, scopePortals,
+} = require('../services/staffScope');
 
 router.use(requireAuth, requireRole('admin', 'employee'));
 
 /**
- * Every route below is reachable by the super admin (full access to any
- * portal) and by a portal-incharge employee (restricted to the portals
- * they've been assigned). This is the single place that decides "am I
- * allowed to see/touch this portal's data" — everything else trusts it.
+ * Every route below is reachable by the super admin (full access) and by an
+ * employee — who only ever reaches the users assigned to them, by type or by
+ * name (services/staffScope.js). These three helpers are the only way a
+ * route decides "may this staff member see / touch this":
+ *
+ *   scopedUserIds(req, portal?)  ids of every user they manage (lists)
+ *   assertManages(req, userDoc)  one user, already loaded (single records)
+ *   assertManagesRole(req, id, role)  a user id that must be theirs AND of that type
+ *
+ * Listings, leads, microsites and documents are always authorized through
+ * the user they belong to — never by their own id alone.
  */
-function resolvePortalScope(req, requestedPortal) {
-  if (requestedPortal && !PORTALS.includes(requestedPortal)) throw new HttpError(400, 'Invalid portal');
-  if (req.user.role === 'admin') return requestedPortal ? [requestedPortal] : PORTALS;
-
-  const allowed = req.user.managedPortals || [];
-  if (requestedPortal) {
-    if (!allowed.includes(requestedPortal)) throw new HttpError(403, 'You are not in charge of this portal');
-    return [requestedPortal];
-  }
-  if (!allowed.length) throw new HttpError(403, 'No portal assigned to your account yet');
-  return allowed;
-}
-
-async function userIdsForPortals(portals) {
-  const rows = await User.find({ role: { $in: portals } }).select('_id').lean();
-  return rows.map((u) => u._id);
+const scopedUserIds = (req, portal) => managedUserIds(req.user, portal);
+const assertManages = (req, target) => assertCanManage(req.user, target);
+async function assertManagesRole(req, userId, role) {
+  const target = await assertCanManageId(req.user, userId, 'role');
+  if (target.role !== role) throw new HttpError(404, 'Application not found');
+  return target;
 }
 
 /** Authorizes + applies a moderation write on a listing owned via `ownerField`. */
@@ -55,7 +55,7 @@ async function moderateListing(req, Model, ownerField, id, patch, del = false) {
   if (!existing) throw new HttpError(404, 'Not found');
   const owner = await User.findById(existing[ownerField]).select('role').lean();
   if (!owner) throw new HttpError(404, 'Owner not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
   if (del) { await Model.findByIdAndDelete(id); return; }
   await Model.findByIdAndUpdate(id, patch);
 }
@@ -82,9 +82,42 @@ async function writeAudit(req, { targetUser, action, previousStatus, newStatus, 
 /* ============================================================ employees */
 /* Admin-only — employees can never manage other employees. */
 
+/** Employees with the users individually assigned to them spelled out. */
+async function shapeEmployee(doc) {
+  const obj = shapeUser(doc);
+  const assigned = (obj.assignedUsers || []).length
+    ? await User.find({ _id: { $in: obj.assignedUsers } }).select('name email role').lean()
+    : [];
+  obj.assignedUsers = assigned.map((u) => ({ id: String(u._id), name: u.name, email: u.email, role: u.role }));
+  return obj;
+}
+
+/** Ids of real, assignable users — an employee can only be given owners,
+ *  agents, builders and service providers. */
+async function validAssignees(ids = []) {
+  const unique = [...new Set(ids.map(String))];
+  if (!unique.length) return [];
+  const rows = await User.find({ _id: { $in: unique }, role: { $in: MANAGED_ROLES } }).select('_id').lean();
+  if (rows.length !== unique.length) throw new HttpError(422, 'One of the selected users cannot be assigned to an employee');
+  return rows.map((u) => u._id);
+}
+
+const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid user');
+
 router.get('/employees', requireRole('admin'), asyncHandler(async (req, res) => {
   const rows = await User.find({ role: 'employee' }).sort({ createdAt: -1 }).lean();
-  res.json({ data: rows.map(shapeUser) });
+  res.json({ data: await Promise.all(rows.map(shapeEmployee)), meta: { defaultPassword: DEFAULT_EMPLOYEE_PASSWORD } });
+}));
+
+/** GET /assignable-users?q=&role= — the picker behind "assign specific users". */
+router.get('/assignable-users', requireRole('admin'), asyncHandler(async (req, res) => {
+  const filter = { role: MANAGED_ROLES.includes(req.query.role) ? req.query.role : { $in: MANAGED_ROLES } };
+  if (req.query.q) {
+    const q = String(req.query.q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.$or = [{ name: new RegExp(q, 'i') }, { email: new RegExp(q, 'i') }, { phone: new RegExp(q, 'i') }];
+  }
+  const rows = await User.find(filter).select('name email phone role companyName approvalStatus').sort({ createdAt: -1 }).limit(30).lean();
+  res.json({ data: rows.map((u) => ({ id: String(u._id), name: u.name, email: u.email, phone: u.phone, role: u.role, companyName: u.companyName, approvalStatus: u.approvalStatus })) });
 }));
 
 router.post('/employees', requireRole('admin'), asyncHandler(async (req, res) => {
@@ -92,31 +125,40 @@ router.post('/employees', requireRole('admin'), asyncHandler(async (req, res) =>
     name: z.string().min(2, 'Enter a name').max(120),
     email: z.string().email('Enter a valid email'),
     phone: z.string().regex(/^[0-9]{10}$/, 'Enter a valid 10 digit mobile number'),
-    password: z.string().min(6, 'Password must be at least 6 characters'),
-    managed_portals: z.array(z.enum(PORTALS)).min(1, 'Assign at least one portal'),
+    managed_portals: z.array(z.enum(MANAGED_ROLES)).default([]),
+    assigned_users: z.array(objectId).max(500).default([]),
   }).parse(req.body);
+  if (!d.managed_portals.length && !d.assigned_users.length) {
+    throw new HttpError(422, 'Assign at least one user type or one specific user');
+  }
 
   const exists = await User.findOne({ $or: [{ email: d.email }, { phone: d.phone }] }).select('_id').lean();
   if (exists) throw new HttpError(409, 'An account already exists with this email or mobile number');
 
+  // The login is the employee's email + the default password; they are asked
+  // to change it after their first sign-in.
   const employee = await User.create({
     name: d.name,
     email: d.email,
     phone: d.phone,
-    password: d.password,
+    password: DEFAULT_EMPLOYEE_PASSWORD,
+    mustChangePassword: true,
     role: 'employee',
     managedPortals: d.managed_portals,
+    assignedUsers: await validAssignees(d.assigned_users),
   });
 
-  res.status(201).json({ data: shapeUser(employee.toObject()) });
+  res.status(201).json({ data: await shapeEmployee(employee.toObject()), meta: { defaultPassword: DEFAULT_EMPLOYEE_PASSWORD } });
 }));
 
 router.put('/employees/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const d = z.object({
     name: z.string().min(2).max(120).optional(),
     phone: z.string().regex(/^[0-9]{10}$/, 'Enter a valid 10 digit mobile number').optional(),
-    managed_portals: z.array(z.enum(PORTALS)).min(1).optional(),
+    managed_portals: z.array(z.enum(MANAGED_ROLES)).optional(),
+    assigned_users: z.array(objectId).max(500).optional(),
     status: z.enum(['active', 'suspended']).optional(),
+    reset_password: z.boolean().optional(),
   }).parse(req.body);
 
   const employee = await User.findOne({ _id: req.params.id, role: 'employee' });
@@ -125,10 +167,19 @@ router.put('/employees/:id', requireRole('admin'), asyncHandler(async (req, res)
   if (d.name !== undefined) employee.name = d.name;
   if (d.phone !== undefined) employee.phone = d.phone;
   if (d.managed_portals !== undefined) employee.managedPortals = d.managed_portals;
+  if (d.assigned_users !== undefined) employee.assignedUsers = await validAssignees(d.assigned_users);
   if (d.status !== undefined) employee.status = d.status;
+  if (d.reset_password) {
+    employee.password = DEFAULT_EMPLOYEE_PASSWORD;
+    employee.mustChangePassword = true;
+  }
+  if ((d.managed_portals !== undefined || d.assigned_users !== undefined)
+      && !employee.managedPortals.length && !employee.assignedUsers.length) {
+    throw new HttpError(422, 'Assign at least one user type or one specific user');
+  }
   await employee.save();
 
-  res.json({ data: shapeUser(employee.toObject()) });
+  res.json({ data: await shapeEmployee(employee.toObject()), message: d.reset_password ? `Password reset to ${DEFAULT_EMPLOYEE_PASSWORD}` : undefined });
 }));
 
 router.delete('/employees/:id', requireRole('admin'), asyncHandler(async (req, res) => {
@@ -140,42 +191,92 @@ router.delete('/employees/:id', requireRole('admin'), asyncHandler(async (req, r
 
 /* =================================================================== users */
 
+const withApprover = (q) => q.populate({ path: 'approvedBy', select: 'name role' });
+function shapeManagedUser(doc) {
+  const obj = shapeUser(doc);
+  const by = obj.approvedBy && typeof obj.approvedBy === 'object' ? obj.approvedBy : null;
+  obj.approvedBy = by ? String(by._id) : null;
+  obj.approvedByName = by?.name || null;
+  obj.approvedByRole = by?.role || null;
+  delete obj.managedPortals; delete obj.assignedUsers; delete obj.mustChangePassword;
+  return obj;
+}
+
 router.get('/users', asyncHandler(async (req, res) => {
-  const scope = resolvePortalScope(req, req.query.portal);
   const { page, limit, offset } = paginate(req.query);
 
-  const filter = { role: { $in: scope } };
+  await assertPortalAccess(req.user, req.query.portal);
+  const clauses = [managedUserQuery(req.user, req.query.portal)];
   if (req.query.q) {
     const q = String(req.query.q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.$or = [{ name: new RegExp(q, 'i') }, { email: new RegExp(q, 'i') }, { phone: new RegExp(q, 'i') }];
+    clauses.push({ $or: [{ name: new RegExp(q, 'i') }, { email: new RegExp(q, 'i') }, { phone: new RegExp(q, 'i') }] });
   }
   if (req.query.approval) {
     if (!['pending', 'approved', 'rejected'].includes(req.query.approval)) throw new HttpError(400, 'Invalid approval filter');
-    filter.approvalStatus = req.query.approval;
+    clauses.push({ approvalStatus: req.query.approval });
   }
+  const filter = { $and: clauses };
 
   const [rows, total] = await Promise.all([
-    User.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limit).lean(),
+    withApprover(User.find(filter)).sort({ createdAt: -1 }).skip(offset).limit(limit).lean(),
     User.countDocuments(filter),
   ]);
-  res.json({ data: rows.map(shapeUser), meta: { page, limit, total } });
+  res.json({ data: rows.map(shapeManagedUser), meta: { page, limit, total } });
+}));
+
+const shapeHistory = (h) => ({
+  id: String(h._id), action: h.action, previousStatus: h.previousStatus, newStatus: h.newStatus,
+  reason: h.reason, adminName: h.admin?.name, adminRole: h.admin?.role, createdAt: h.createdAt,
+});
+
+/** GET /users/:id — one assigned user in full: profile, who approved them,
+ *  their properties, their leads and the approval history. */
+router.get('/users/:id', asyncHandler(async (req, res) => {
+  await assertCanManageId(req.user, req.params.id);
+  const user = await withApprover(User.findById(req.params.id)).lean();
+
+  const [properties, leads, history, leadTotal] = await Promise.all([
+    Property.find({ user: user._id }).populate({ path: 'reviewedBy', select: 'name role' }).sort({ createdAt: -1 }).limit(100).lean(),
+    Lead.find({ receiver: user._id }).populate('property', 'title slug').populate('project', 'name').populate('service', 'title')
+      .sort({ createdAt: -1 }).limit(100).lean(),
+    AuditLog.find({ targetUser: user._id }).populate('admin', 'name role').sort({ createdAt: -1 }).limit(100).lean(),
+    Lead.countDocuments({ receiver: user._id }),
+  ]);
+
+  res.json({
+    data: {
+      user: shapeManagedUser(user),
+      properties: properties.map(shapeAdminProperty),
+      leads: leads.map((l) => ({
+        id: String(l._id), name: l.name, phone: l.phone, email: l.email, status: l.status, temperature: l.temperature,
+        source: l.source, createdAt: l.createdAt, about: l.property?.title || l.project?.name || l.service?.title || null,
+      })),
+      leadTotal,
+      history: history.map(shapeHistory),
+    },
+  });
 }));
 
 router.put('/users/:id/status', asyncHandler(async (req, res) => {
   const { status } = z.object({ status: z.enum(['active', 'suspended']) }).parse(req.body);
   const target = await User.findById(req.params.id).select('role status').lean();
   if (!target) throw new HttpError(404, 'User not found');
-  resolvePortalScope(req, target.role);
+  assertManages(req, target);
   await User.findByIdAndUpdate(req.params.id, { status });
   await writeAudit(req, { targetUser: req.params.id, action: 'user_status', previousStatus: target.status, newStatus: status });
   res.json({ message: status === 'suspended' ? 'User suspended' : 'User reactivated' });
 }));
 
+/** PUT /users/:id/approval — the verification decision on a new account.
+ *  Records who decided, when and why; the user is told either way. */
 router.put('/users/:id/approval', asyncHandler(async (req, res) => {
-  const { approval_status } = z.object({ approval_status: z.enum(['pending', 'approved', 'rejected']) }).parse(req.body);
-  const target = await User.findById(req.params.id).select('role approvalStatus').lean();
+  const { approval_status, reason } = z.object({
+    approval_status: z.enum(['pending', 'approved', 'rejected']),
+    reason: z.string().max(500).optional(),
+  }).parse(req.body);
+  const target = await User.findById(req.params.id).select('role approvalStatus name').lean();
   if (!target) throw new HttpError(404, 'User not found');
-  resolvePortalScope(req, target.role);
+  assertManages(req, target);
   if (target.role === 'agent') {
     throw new HttpError(409, 'Agents go through KYC/RERA review — use Agent Applications to approve or reject them, not this generic action.');
   }
@@ -185,9 +286,26 @@ router.put('/users/:id/approval', asyncHandler(async (req, res) => {
   if (target.role === 'service') {
     throw new HttpError(409, 'Service providers go through identity/qualification review — use Service Applications to approve or reject them, not this generic action.');
   }
-  await User.findByIdAndUpdate(req.params.id, { approvalStatus: approval_status });
-  await writeAudit(req, { targetUser: req.params.id, action: 'approval_status', previousStatus: target.approvalStatus, newStatus: approval_status });
-  const messages = { approved: 'Account approved — they can post listings now', rejected: 'Application rejected', pending: 'Moved back to pending' };
+  if (approval_status === 'rejected' && !reason) throw new HttpError(422, 'Add a reason so the user knows why');
+
+  const decided = approval_status !== 'pending';
+  await User.findByIdAndUpdate(req.params.id, {
+    approvalStatus: approval_status,
+    approvedBy: decided ? req.user._id : null,
+    approvedAt: decided ? new Date() : null,
+    approvalNote: nn(reason),
+    ...(approval_status === 'approved' ? { isVerified: true } : {}),
+  });
+  await writeAudit(req, { targetUser: req.params.id, action: 'approval_status', previousStatus: target.approvalStatus, newStatus: approval_status, reason });
+  if (decided) {
+    await Notification.create({
+      user: req.params.id, kind: 'system',
+      title: approval_status === 'approved' ? 'Your account is approved' : 'Your account was not approved',
+      body: approval_status === 'approved' ? 'Verification complete — you can post properties now.' : reason,
+      link: '/dashboard',
+    });
+  }
+  const messages = { approved: 'Account approved — they can post listings now', rejected: 'Application rejected', pending: 'Moved back to under verification' };
   res.json({ message: messages[approval_status] });
 }));
 
@@ -195,7 +313,7 @@ router.put('/users/:id/verify', asyncHandler(async (req, res) => {
   const { is_verified } = z.object({ is_verified: z.boolean() }).parse(req.body);
   const target = await User.findById(req.params.id).select('role isVerified').lean();
   if (!target) throw new HttpError(404, 'User not found');
-  resolvePortalScope(req, target.role);
+  assertManages(req, target);
   await User.findByIdAndUpdate(req.params.id, { isVerified: is_verified });
   await writeAudit(req, {
     targetUser: req.params.id, action: 'user_verify',
@@ -206,40 +324,85 @@ router.put('/users/:id/verify', asyncHandler(async (req, res) => {
 
 /* =============================================================== properties */
 
+function shapeAdminProperty(p) {
+  const by = p.reviewedBy && typeof p.reviewedBy === 'object' ? p.reviewedBy : null;
+  return {
+    id: String(p._id),
+    title: p.title,
+    slug: p.slug,
+    purpose: p.purpose,
+    propertyType: p.propertyType,
+    price: p.price,
+    city: p.city,
+    locality: p.locality,
+    coverImage: p.coverImage,
+    status: p.status,
+    isFeatured: p.isFeatured,
+    isVerified: p.isVerified,
+    views: p.views,
+    createdAt: p.createdAt,
+    ownerId: p.user?._id ? String(p.user._id) : (p.user ? String(p.user) : null),
+    ownerName: p.user?.name,
+    ownerRole: p.user?.role,
+    ownerCompany: p.user?.companyName,
+    reviewedByName: by?.name || null,
+    reviewedAt: p.reviewedAt || null,
+    reviewNote: p.reviewNote || null,
+  };
+}
+
+const PROPERTY_STATUSES = ['pending', 'rejected', 'active', 'sold', 'rented', 'inactive'];
+
 router.get('/properties', asyncHandler(async (req, res) => {
-  const scope = resolvePortalScope(req, req.query.portal);
-  const ownerIds = await userIdsForPortals(scope);
+  const ownerIds = await scopedUserIds(req, req.query.portal);
   const { page, limit, offset } = paginate(req.query);
 
   const filter = { user: { $in: ownerIds } };
+  if (req.query.status) {
+    if (!PROPERTY_STATUSES.includes(req.query.status)) throw new HttpError(400, 'Invalid status filter');
+    filter.status = req.query.status;
+  }
   const [rows, total] = await Promise.all([
-    Property.find(filter).populate({ path: 'user', select: 'name role companyName' })
+    Property.find(filter).populate({ path: 'user', select: 'name role companyName' }).populate({ path: 'reviewedBy', select: 'name role' })
       .sort({ createdAt: -1 }).skip(offset).limit(limit).lean(),
     Property.countDocuments(filter),
   ]);
 
-  res.json({
-    data: rows.map((p) => ({
-      id: String(p._id),
-      title: p.title,
-      slug: p.slug,
-      purpose: p.purpose,
-      propertyType: p.propertyType,
-      price: p.price,
-      city: p.city,
-      locality: p.locality,
-      coverImage: p.coverImage,
-      status: p.status,
-      isFeatured: p.isFeatured,
-      isVerified: p.isVerified,
-      views: p.views,
-      createdAt: p.createdAt,
-      ownerName: p.user?.name,
-      ownerRole: p.user?.role,
-      ownerCompany: p.user?.companyName,
-    })),
-    meta: { page, limit, total },
+  res.json({ data: rows.map(shapeAdminProperty), meta: { page, limit, total } });
+}));
+
+/** PUT /properties/:id/review — the verification decision on a listing.
+ *  Approved = live; rejected = sent back to its lister with the reason. */
+router.put('/properties/:id/review', asyncHandler(async (req, res) => {
+  const { decision, reason } = z.object({
+    decision: z.enum(['approved', 'rejected']),
+    reason: z.string().max(500).optional(),
+  }).parse(req.body);
+  if (decision === 'rejected' && !reason) throw new HttpError(422, 'Add a reason so the lister knows what to fix');
+
+  const property = await Property.findById(req.params.id).select('user status title').lean();
+  if (!property) throw new HttpError(404, 'Not found');
+  const owner = await User.findById(property.user).select('role approvalStatus').lean();
+  if (!owner) throw new HttpError(404, 'Owner not found');
+  assertManages(req, owner);
+  if (decision === 'approved' && owner.approvalStatus !== 'approved') {
+    throw new HttpError(409, 'Approve the user\'s account first — an unverified user cannot have a live property');
+  }
+
+  const status = decision === 'approved' ? 'active' : 'rejected';
+  await Property.findByIdAndUpdate(property._id, { status, reviewedBy: req.user._id, reviewedAt: new Date(), reviewNote: nn(reason) });
+  await writeAudit(req, {
+    targetUser: property.user, action: 'property_review', previousStatus: property.status, newStatus: status,
+    reason: [`"${property.title}"`, reason].filter(Boolean).join(' — ').slice(0, 500),
   });
+  await Notification.create({
+    user: property.user, kind: 'system',
+    title: decision === 'approved' ? `"${property.title}" is approved and live` : `"${property.title}" was rejected`,
+    body: reason || undefined,
+    link: '/dashboard/properties',
+  });
+
+  res.json({ message: decision === 'approved' ? 'Property approved — it is live now' : 'Property rejected', data: { status } });
 }));
 
 router.put('/properties/:id/status', asyncHandler(async (req, res) => {
@@ -268,8 +431,7 @@ router.delete('/properties/:id', asyncHandler(async (req, res) => {
 /* ================================================================ microsites */
 
 router.get('/microsites', asyncHandler(async (req, res) => {
-  const scope = resolvePortalScope(req, req.query.portal);
-  const ownerIds = await userIdsForPortals(scope);
+  const ownerIds = await scopedUserIds(req, req.query.portal);
   const { page, limit, offset } = paginate(req.query);
 
   const filter = { createdBy: { $in: ownerIds } };
@@ -329,8 +491,7 @@ function namesMismatch(a, b) {
 }
 
 router.get('/projects', asyncHandler(async (req, res) => {
-  const scope = resolvePortalScope(req, req.query.portal);
-  const ownerIds = await userIdsForPortals(scope);
+  const ownerIds = await scopedUserIds(req, req.query.portal);
   const { page, limit, offset } = paginate(req.query);
 
   const filter = { builder: { $in: ownerIds } };
@@ -371,7 +532,7 @@ router.get('/projects', asyncHandler(async (req, res) => {
 router.get('/projects/:id', asyncHandler(async (req, res) => {
   const project = await Project.findById(req.params.id).populate('builder', 'name role companyName').lean();
   if (!project) throw new HttpError(404, 'Project not found');
-  resolvePortalScope(req, project.builder?.role);
+  assertManages(req, project.builder);
 
   const [builderProfile, documents, history] = await Promise.all([
     BuilderProfile.findOne({ user: project.builder._id }).select('legalEntityName entityType').lean(),
@@ -410,7 +571,7 @@ router.put('/projects/:id/verification', asyncHandler(async (req, res) => {
   if (!existing) throw new HttpError(404, 'Project not found');
   const owner = await User.findById(existing.builder).select('role').lean();
   if (!owner) throw new HttpError(404, 'Owner not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
 
   const previousStatus = existing.verificationStatus;
   await Project.findByIdAndUpdate(req.params.id, {
@@ -453,8 +614,7 @@ router.delete('/projects/:id', asyncHandler(async (req, res) => {
 /* ================================================================= services */
 
 router.get('/services', asyncHandler(async (req, res) => {
-  const scope = resolvePortalScope(req, req.query.portal);
-  const ownerIds = await userIdsForPortals(scope);
+  const ownerIds = await scopedUserIds(req, req.query.portal);
   const { page, limit, offset } = paginate(req.query);
 
   const filter = { user: { $in: ownerIds } };
@@ -507,11 +667,15 @@ const STAGE_LABEL = {
 };
 
 router.get('/leads', asyncHandler(async (req, res) => {
-  const scope = resolvePortalScope(req, req.query.portal);
-  const receiverIds = await userIdsForPortals(scope);
+  const receiverIds = await scopedUserIds(req, req.query.portal);
   const { page, limit, offset } = paginate(req.query);
 
   const filter = { receiver: { $in: receiverIds } };
+  if (req.query.receiver) {
+    // one assigned user's leads — still only if that user is in scope
+    if (!receiverIds.some((id) => String(id) === String(req.query.receiver))) throw new HttpError(403, 'This user is not assigned to you');
+    filter.receiver = req.query.receiver;
+  }
   const [rows, total] = await Promise.all([
     Lead.find(filter)
       .populate('property', 'title slug')
@@ -560,7 +724,7 @@ router.patch('/leads/:id', asyncHandler(async (req, res) => {
   if (!lead) throw new HttpError(404, 'Lead not found');
   const receiver = await User.findById(lead.receiver).select('role').lean();
   if (!receiver) throw new HttpError(404, 'Receiving user not found');
-  resolvePortalScope(req, receiver.role);
+  assertManages(req, receiver);
 
   const patch = {};
   if (d.status !== undefined) patch.status = d.status;
@@ -572,7 +736,7 @@ router.patch('/leads/:id', asyncHandler(async (req, res) => {
     } else {
       assignee = await User.findById(d.assigned_to).select('role name').lean();
       if (!assignee) throw new HttpError(404, 'Assignee not found');
-      resolvePortalScope(req, assignee.role);
+      assertManages(req, assignee);
       patch.assignedTo = d.assigned_to;
     }
   }
@@ -618,7 +782,7 @@ router.get('/leads/:id', asyncHandler(async (req, res) => {
     .lean();
   if (!lead) throw new HttpError(404, 'Lead not found');
   const receiver = await User.findById(lead.receiver).select('role').lean();
-  resolvePortalScope(req, receiver?.role);
+  assertManages(req, receiver);
 
   res.json({
     data: {
@@ -657,7 +821,7 @@ router.post('/leads/:id/notes', asyncHandler(async (req, res) => {
   const lead = await Lead.findById(req.params.id).select('receiver').lean();
   if (!lead) throw new HttpError(404, 'Lead not found');
   const receiver = await User.findById(lead.receiver).select('role').lean();
-  resolvePortalScope(req, receiver?.role);
+  assertManages(req, receiver);
 
   await leadNotes.addNote(lead._id, { authorId: req.user._id, text: d.text, temperature: d.temperature });
   await writeAudit(req, { targetUser: lead.receiver, action: 'lead_note', reason: `lead ${req.params.id}` });
@@ -675,7 +839,7 @@ router.post('/leads/:id/book', asyncHandler(async (req, res) => {
   const lead = await Lead.findById(req.params.id).select('receiver status').lean();
   if (!lead) throw new HttpError(404, 'Lead not found');
   const receiver = await User.findById(lead.receiver).select('role').lean();
-  resolvePortalScope(req, receiver?.role);
+  assertManages(req, receiver);
   if (lead.status === 'booked') throw new HttpError(409, 'This lead is already booked');
 
   await Lead.findByIdAndUpdate(lead._id, {
@@ -712,10 +876,10 @@ function shapeAdminDocument(doc) {
 }
 
 router.get('/agent-applications', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'agent');
   const { page, limit, offset } = paginate(req.query);
 
-  const filter = {};
+  // only the applications of users assigned to this staff member
+  const filter = { user: { $in: await scopedUserIds(req, 'agent') } };
   if (req.query.status) filter.lifecycleStatus = req.query.status;
 
   const [rows, total] = await Promise.all([
@@ -747,7 +911,7 @@ router.get('/agent-applications', asyncHandler(async (req, res) => {
 }));
 
 router.get('/agent-applications/:id', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'agent');
+  await assertManagesRole(req, req.params.id, 'agent');
 
   const [profile, user, documents, history] = await Promise.all([
     AgentProfile.findOne({ user: req.params.id }).lean(),
@@ -783,7 +947,7 @@ async function reviewTrack(req, res, track) {
     reason: z.string().max(500).optional(),
   }).parse(req.body);
 
-  resolvePortalScope(req, 'agent');
+  await assertManagesRole(req, req.params.id, 'agent');
   const profile = await AgentProfile.findOne({ user: req.params.id });
   if (!profile) throw new HttpError(404, 'Agent application not found');
   if (decision === 'rejected' && !reason) throw new HttpError(422, 'Add a reason so the agent knows what to fix');
@@ -815,7 +979,7 @@ router.put('/agent-applications/:id/rera', asyncHandler((req, res) => reviewTrac
 router.put('/agent-applications/:id/business', asyncHandler((req, res) => reviewTrack(req, res, 'business')));
 
 router.put('/agent-applications/:id/approve', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'agent');
+  await assertManagesRole(req, req.params.id, 'agent');
   const profile = await AgentProfile.findOne({ user: req.params.id });
   if (!profile) throw new HttpError(404, 'Agent application not found');
 
@@ -829,7 +993,7 @@ router.put('/agent-applications/:id/approve', asyncHandler(async (req, res) => {
   profile.lifecycleStatus = 'active';
   profile.activatedAt = new Date();
   await profile.save();
-  await User.findByIdAndUpdate(req.params.id, { approvalStatus: 'approved' });
+  await User.findByIdAndUpdate(req.params.id, { approvalStatus: 'approved', approvedBy: req.user._id, approvedAt: new Date(), approvalNote: null });
 
   await writeAudit(req, { targetUser: req.params.id, action: 'agent_approve', previousStatus, newStatus: 'active' });
   await Notification.create({
@@ -845,7 +1009,7 @@ router.get('/agent-documents/:id/file', asyncHandler(async (req, res) => {
   if (!doc) throw new HttpError(404, 'Document not found');
   const owner = await User.findById(doc.agent).select('role').lean();
   if (!owner) throw new HttpError(404, 'Document not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
 
   const buffer = decryptFromDisk(doc.fileKey, doc.iv, doc.authTag);
   res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
@@ -859,7 +1023,7 @@ router.get('/agent-documents/:id/reveal', asyncHandler(async (req, res) => {
   if (!doc) throw new HttpError(404, 'Document not found');
   const owner = await User.findById(doc.agent).select('role').lean();
   if (!owner) throw new HttpError(404, 'Document not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
 
   await writeAudit(req, { targetUser: doc.agent, action: 'document_reveal', reason: doc.type });
   res.json({ data: { idNumber: doc.idNumber || null } });
@@ -871,10 +1035,10 @@ router.get('/agent-documents/:id/reveal', asyncHandler(async (req, res) => {
    RERA/land/approvals review lives above, under /projects/:id/verification. */
 
 router.get('/builder-applications', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'builder');
   const { page, limit, offset } = paginate(req.query);
 
-  const filter = {};
+  // only the applications of users assigned to this staff member
+  const filter = { user: { $in: await scopedUserIds(req, 'builder') } };
   if (req.query.status) filter.lifecycleStatus = req.query.status;
 
   const [rows, total] = await Promise.all([
@@ -904,7 +1068,7 @@ router.get('/builder-applications', asyncHandler(async (req, res) => {
 }));
 
 router.get('/builder-applications/:id', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'builder');
+  await assertManagesRole(req, req.params.id, 'builder');
 
   const [profile, user, documents, history] = await Promise.all([
     BuilderProfile.findOne({ user: req.params.id }).lean(),
@@ -933,7 +1097,7 @@ router.put('/builder-applications/:id/company', asyncHandler(async (req, res) =>
     reason: z.string().max(500).optional(),
   }).parse(req.body);
 
-  resolvePortalScope(req, 'builder');
+  await assertManagesRole(req, req.params.id, 'builder');
   const profile = await BuilderProfile.findOne({ user: req.params.id });
   if (!profile) throw new HttpError(404, 'Builder application not found');
   if (decision === 'rejected' && !reason) throw new HttpError(422, 'Add a reason so the builder knows what to fix');
@@ -961,7 +1125,7 @@ router.put('/builder-applications/:id/company', asyncHandler(async (req, res) =>
 }));
 
 router.put('/builder-applications/:id/approve', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'builder');
+  await assertManagesRole(req, req.params.id, 'builder');
   const profile = await BuilderProfile.findOne({ user: req.params.id });
   if (!profile) throw new HttpError(404, 'Builder application not found');
 
@@ -971,7 +1135,7 @@ router.put('/builder-applications/:id/approve', asyncHandler(async (req, res) =>
   profile.lifecycleStatus = 'active';
   profile.activatedAt = new Date();
   await profile.save();
-  await User.findByIdAndUpdate(req.params.id, { approvalStatus: 'approved' });
+  await User.findByIdAndUpdate(req.params.id, { approvalStatus: 'approved', approvedBy: req.user._id, approvedAt: new Date(), approvalNote: null });
 
   await writeAudit(req, { targetUser: req.params.id, action: 'builder_approve', previousStatus, newStatus: 'active' });
   await Notification.create({
@@ -988,7 +1152,7 @@ router.get('/builder-documents/:id/file', asyncHandler(async (req, res) => {
   if (!doc) throw new HttpError(404, 'Document not found');
   const owner = await User.findById(doc.builder).select('role').lean();
   if (!owner) throw new HttpError(404, 'Document not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
 
   const buffer = decryptFromDisk(doc.fileKey, doc.iv, doc.authTag);
   res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
@@ -1002,7 +1166,7 @@ router.get('/builder-documents/:id/reveal', asyncHandler(async (req, res) => {
   if (!doc) throw new HttpError(404, 'Document not found');
   const owner = await User.findById(doc.builder).select('role').lean();
   if (!owner) throw new HttpError(404, 'Document not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
 
   await writeAudit(req, { targetUser: doc.builder, action: 'document_reveal', reason: doc.type });
   res.json({ data: { idNumber: doc.idNumber || null } });
@@ -1015,7 +1179,7 @@ router.get('/project-documents/:id/file', asyncHandler(async (req, res) => {
   if (!project) throw new HttpError(404, 'Document not found');
   const owner = await User.findById(project.builder).select('role').lean();
   if (!owner) throw new HttpError(404, 'Document not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
 
   const buffer = decryptFromDisk(doc.fileKey, doc.iv, doc.authTag);
   res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
@@ -1030,10 +1194,10 @@ router.get('/project-documents/:id/file', asyncHandler(async (req, res) => {
    serviceCategoryRules per provider — never a fixed checklist. */
 
 router.get('/service-applications', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'service');
   const { page, limit, offset } = paginate(req.query);
 
-  const filter = {};
+  // only the applications of users assigned to this staff member
+  const filter = { user: { $in: await scopedUserIds(req, 'service') } };
   if (req.query.status) filter.lifecycleStatus = req.query.status;
 
   const [rows, total] = await Promise.all([
@@ -1066,7 +1230,7 @@ router.get('/service-applications', asyncHandler(async (req, res) => {
 }));
 
 router.get('/service-applications/:id', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'service');
+  await assertManagesRole(req, req.params.id, 'service');
 
   const [profile, user, documents, history] = await Promise.all([
     ServiceProviderProfile.findOne({ user: req.params.id }).lean(),
@@ -1098,7 +1262,7 @@ async function reviewServiceTrack(req, res, track) {
     reason: z.string().max(500).optional(),
   }).parse(req.body);
 
-  resolvePortalScope(req, 'service');
+  await assertManagesRole(req, req.params.id, 'service');
   const profile = await ServiceProviderProfile.findOne({ user: req.params.id });
   if (!profile) throw new HttpError(404, 'Service provider application not found');
   if (track === 'qualification' && !qualificationRequired(profile.category)) {
@@ -1127,7 +1291,7 @@ router.put('/service-applications/:id/identity', asyncHandler((req, res) => revi
 router.put('/service-applications/:id/qualification', asyncHandler((req, res) => reviewServiceTrack(req, res, 'qualification')));
 
 router.put('/service-applications/:id/approve', asyncHandler(async (req, res) => {
-  resolvePortalScope(req, 'service');
+  await assertManagesRole(req, req.params.id, 'service');
   const profile = await ServiceProviderProfile.findOne({ user: req.params.id });
   if (!profile) throw new HttpError(404, 'Service provider application not found');
 
@@ -1140,7 +1304,7 @@ router.put('/service-applications/:id/approve', asyncHandler(async (req, res) =>
   profile.lifecycleStatus = 'active';
   profile.activatedAt = new Date();
   await profile.save();
-  await User.findByIdAndUpdate(req.params.id, { approvalStatus: 'approved' });
+  await User.findByIdAndUpdate(req.params.id, { approvalStatus: 'approved', approvedBy: req.user._id, approvedAt: new Date(), approvalNote: null });
 
   await writeAudit(req, { targetUser: req.params.id, action: 'service_provider_approve', previousStatus, newStatus: 'active' });
   await Notification.create({
@@ -1157,7 +1321,7 @@ router.get('/service-documents/:id/file', asyncHandler(async (req, res) => {
   if (!doc) throw new HttpError(404, 'Document not found');
   const owner = await User.findById(doc.provider).select('role').lean();
   if (!owner) throw new HttpError(404, 'Document not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
 
   const buffer = decryptFromDisk(doc.fileKey, doc.iv, doc.authTag);
   res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
@@ -1171,7 +1335,7 @@ router.get('/service-documents/:id/reveal', asyncHandler(async (req, res) => {
   if (!doc) throw new HttpError(404, 'Document not found');
   const owner = await User.findById(doc.provider).select('role').lean();
   if (!owner) throw new HttpError(404, 'Document not found');
-  resolvePortalScope(req, owner.role);
+  assertManages(req, owner);
 
   await writeAudit(req, { targetUser: doc.provider, action: 'document_reveal', reason: doc.type });
   res.json({ data: { idNumber: doc.idNumber || null } });
@@ -1180,8 +1344,7 @@ router.get('/service-documents/:id/reveal', asyncHandler(async (req, res) => {
 /* ==================================================================== audit */
 
 router.get('/audit-logs', asyncHandler(async (req, res) => {
-  const scope = resolvePortalScope(req, req.query.portal);
-  const targetIds = await userIdsForPortals(scope);
+  const targetIds = await scopedUserIds(req, req.query.portal);
   const { page, limit, offset } = paginate(req.query);
 
   const filter = { targetUser: { $in: targetIds } };
@@ -1199,6 +1362,8 @@ router.get('/audit-logs', asyncHandler(async (req, res) => {
       newStatus: r.newStatus,
       reason: r.reason,
       adminName: r.admin?.name,
+      adminRole: r.admin?.role,
+      targetId: r.targetUser?._id ? String(r.targetUser._id) : null,
       targetName: r.targetUser?.name,
       targetRole: r.targetUser?.role,
       createdAt: r.createdAt,
@@ -1209,33 +1374,84 @@ router.get('/audit-logs', asyncHandler(async (req, res) => {
 
 /* ================================================================= overview */
 
-router.get('/overview', asyncHandler(async (req, res) => {
-  const scope = resolvePortalScope(req, req.query.portal);
-  const ownerIds = await userIdsForPortals(scope);
+/* ========================================================= staff dashboard */
+/* The Employee Portal's home (/staff): the numbers and short queues an
+   employee works from — every one of them counted over their assigned users
+   only (an admin gets the same view across everyone). */
 
-  const [users, properties, projects, services, leads, employees, pendingApprovals, pendingAgentReview, pendingBuilderReview, pendingProjectVerification, pendingServiceReview] = await Promise.all([
-    User.countDocuments({ role: { $in: scope } }),
-    Property.countDocuments({ user: { $in: ownerIds } }),
-    Project.countDocuments({ builder: { $in: ownerIds } }),
-    ServiceOffering.countDocuments({ user: { $in: ownerIds } }),
-    Lead.countDocuments({ receiver: { $in: ownerIds } }),
-    req.user.role === 'admin' ? User.countDocuments({ role: 'employee' }) : null,
-    User.countDocuments({ role: { $in: scope }, approvalStatus: 'pending' }),
-    scope.includes('agent')
-      ? AgentProfile.countDocuments({ lifecycleStatus: { $in: ['submitted', 'under_review'] } })
-      : 0,
-    scope.includes('builder')
-      ? BuilderProfile.countDocuments({ lifecycleStatus: { $in: ['submitted', 'under_review'] } })
-      : 0,
-    scope.includes('builder')
-      ? Project.countDocuments({ builder: { $in: ownerIds }, verificationStatus: { $in: ['submitted', 'under_review'] } })
-      : 0,
-    scope.includes('service')
-      ? ServiceProviderProfile.countDocuments({ lifecycleStatus: { $in: ['submitted', 'under_review'] } })
-      : 0,
+const ACTIVE_LEAD_STATUSES = ['contacted', 'visit-scheduled', 'nurturing', 'negotiation'];
+const APPROVAL_EVENTS = [
+  { action: 'approval_status', newStatus: 'approved' },
+  { action: 'property_review', newStatus: 'active' },
+  { action: { $in: ['agent_approve', 'builder_approve', 'service_provider_approve'] } },
+];
+
+router.get('/staff-dashboard', asyncHandler(async (req, res) => {
+  const ids = await scopedUserIds(req);
+  const mine = { $in: ids };
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [byRole, pendingUsers, pendingProperties, activeLeads, pendingLeads, approvedThisWeek, recent, userQueue, propertyQueue] = await Promise.all([
+    User.aggregate([{ $match: { _id: mine } }, { $group: { _id: '$role', count: { $sum: 1 } } }]),
+    User.countDocuments({ _id: mine, approvalStatus: 'pending' }),
+    Property.countDocuments({ user: mine, status: 'pending' }),
+    Lead.countDocuments({ receiver: mine, status: { $in: ACTIVE_LEAD_STATUSES } }),
+    Lead.countDocuments({ receiver: mine, status: 'new' }),
+    AuditLog.countDocuments({ targetUser: mine, $or: APPROVAL_EVENTS, createdAt: { $gte: weekAgo } }),
+    AuditLog.find({ targetUser: mine, $or: APPROVAL_EVENTS }).populate('admin', 'name role').populate('targetUser', 'name role')
+      .sort({ createdAt: -1 }).limit(8).lean(),
+    User.find({ _id: mine, approvalStatus: 'pending' }).select('name email role createdAt').sort({ createdAt: -1 }).limit(5).lean(),
+    Property.find({ user: mine, status: 'pending' }).select('title slug locality city user createdAt').populate('user', 'name role')
+      .sort({ createdAt: -1 }).limit(5).lean(),
   ]);
 
-  res.json({ data: { portals: scope, users, properties, projects, services, leads, employees, pendingApprovals, pendingAgentReview, pendingBuilderReview, pendingProjectVerification, pendingServiceReview } });
+  res.json({
+    data: {
+      portals: await scopePortals(req.user),
+      assignedUsers: ids.length,
+      usersByRole: Object.fromEntries(byRole.map((r) => [r._id, r.count])),
+      pendingUsers,
+      pendingProperties,
+      activeLeads,
+      pendingLeads,
+      approvedThisWeek,
+      recentlyApproved: recent.map((r) => ({
+        id: String(r._id), action: r.action, reason: r.reason, createdAt: r.createdAt,
+        targetId: r.targetUser?._id ? String(r.targetUser._id) : null, targetName: r.targetUser?.name, targetRole: r.targetUser?.role,
+        adminName: r.admin?.name, adminRole: r.admin?.role,
+      })),
+      userQueue: userQueue.map((u) => ({ id: String(u._id), name: u.name, email: u.email, role: u.role, createdAt: u.createdAt })),
+      propertyQueue: propertyQueue.map((p) => ({
+        id: String(p._id), title: p.title, slug: p.slug, place: [p.locality, p.city].filter(Boolean).join(', '),
+        ownerId: p.user?._id ? String(p.user._id) : null, ownerName: p.user?.name, ownerRole: p.user?.role, createdAt: p.createdAt,
+      })),
+    },
+  });
+}));
+
+router.get('/overview', asyncHandler(async (req, res) => {
+  const ownerIds = await scopedUserIds(req, req.query.portal);
+  // the user types this staff member has anyone in (all four for an admin)
+  const scope = req.query.portal ? [req.query.portal] : await scopePortals(req.user);
+  const mine = { $in: ownerIds };
+  const inReview = { $in: ['submitted', 'under_review'] };
+
+  const [users, properties, projects, services, leads, employees, pendingApprovals, pendingProperties, pendingAgentReview, pendingBuilderReview, pendingProjectVerification, pendingServiceReview] = await Promise.all([
+    User.countDocuments({ _id: mine }),
+    Property.countDocuments({ user: mine }),
+    Project.countDocuments({ builder: mine }),
+    ServiceOffering.countDocuments({ user: mine }),
+    Lead.countDocuments({ receiver: mine }),
+    req.user.role === 'admin' ? User.countDocuments({ role: 'employee' }) : null,
+    User.countDocuments({ _id: mine, approvalStatus: 'pending' }),
+    Property.countDocuments({ user: mine, status: 'pending' }),
+    scope.includes('agent') ? AgentProfile.countDocuments({ user: mine, lifecycleStatus: inReview }) : 0,
+    scope.includes('builder') ? BuilderProfile.countDocuments({ user: mine, lifecycleStatus: inReview }) : 0,
+    scope.includes('builder') ? Project.countDocuments({ builder: mine, verificationStatus: inReview }) : 0,
+    scope.includes('service') ? ServiceProviderProfile.countDocuments({ user: mine, lifecycleStatus: inReview }) : 0,
+  ]);
+
+  res.json({ data: { portals: scope, users, properties, projects, services, leads, employees, pendingApprovals, pendingProperties, pendingAgentReview, pendingBuilderReview, pendingProjectVerification, pendingServiceReview } });
 }));
 
 module.exports = router;

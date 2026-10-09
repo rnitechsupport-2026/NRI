@@ -4,11 +4,13 @@ import api from '../../../api/client.js';
 import { Empty, PageLoader } from '../../../components/ui.jsx';
 import { timeAgo, titleCase } from '../../../utils/format.js';
 import { Wrench, ArrowRight } from '../../../components/Icons.jsx';
+import { useStaffBase } from '../../../staff/staffBase.js';
 
 const STATUSES = ['all', 'draft', 'submitted', 'under_review', 'verified', 'active', 'rejected', 'resubmission_required'];
 const TRACK_CLS = { not_submitted: 'badge-outline', submitted: 'badge-blue', under_review: 'badge-amber', verified: 'badge-green', rejected: 'badge-red', expired: 'badge-red' };
 
 export default function AdminServiceApplications() {
+  const base = useStaffBase();
   const [status, setStatus] = useState('submitted');
   const [rows, setRows] = useState(null);
 
@@ -58,7 +60,7 @@ export default function AdminServiceApplications() {
                   <td><span className="badge badge-navy" style={{ background: '#fff', color: 'var(--navy-800)' }}>{titleCase(p.lifecycleStatus)}</span></td>
                   <td className="muted small nowrap">{p.submittedAt ? timeAgo(p.submittedAt) : '—'}</td>
                   <td>
-                    <Link to={`/dashboard/admin/service-providers/${p.userId}`} className="btn btn-xs btn-primary">
+                    <Link to={`${base}/service-providers/${p.userId}`} className="btn btn-xs btn-primary">
                       Review <ArrowRight style={{ width: 12, height: 12 }} />
                     </Link>
                   </td>

@@ -1,35 +1,27 @@
-import { motion } from 'framer-motion';
-import { Check } from '../../../components/Icons.jsx';
-import { toneStyle, headingFontClass, cardStyle } from '../theme.js';
-import FadeIn from '../FadeIn.jsx';
+import Section, { SectionHeading } from '../Section.jsx';
+import Card from '../Card.jsx';
+import { Stagger } from '../motion.jsx';
 
-export default function Highlights({ data = {}, settings = {}, theme }) {
+export default function Highlights({ anchorId = 'ms-highlights', data = {}, settings = {} }) {
   const items = Array.isArray(data.items) ? data.items.filter(Boolean) : [];
   if (!items.length) return null;
   const tone = settings.tone || 'light';
 
   return (
-    <section id="ms-highlights" className="px-6" style={{ ...toneStyle(theme, tone), paddingTop: 'var(--ms-pad-y)', paddingBottom: 'var(--ms-pad-y)' }}>
-      <div className="mx-auto max-w-5xl">
-        <FadeIn>
-          <h2 className={`${headingFontClass(theme)} mb-8 text-3xl font-semibold`}>{data.heading || 'Highlights'}</h2>
-        </FadeIn>
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-          {items.map((item, i) => (
-            <FadeIn key={i} delay={Math.min(i * 0.06, 0.4)}>
-              <motion.div
-                whileHover={{ y: -3 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="flex h-full items-start gap-3 p-4"
-                style={cardStyle(tone)}
-              >
-                <Check style={{ width: 18, height: 18, color: theme.secondaryColor, flexShrink: 0, marginTop: 2 }} />
-                <span className="text-sm">{item}</span>
-              </motion.div>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
+    <Section id={anchorId} tone={tone}>
+      <SectionHeading eyebrow="Why it stands out" title={data.heading || 'Highlights'} className="mb-10 sm:mb-14" />
+      <Stagger className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((item, i) => (
+          <Card key={i} className="flex flex-col gap-5 p-6">
+            {/* oversized index numeral, the way a brochure numbers its selling points */}
+            <span className="ms-display ms-accent text-4xl font-semibold leading-none opacity-80" aria-hidden="true">
+              {String(i + 1).padStart(2, '0')}
+            </span>
+            <hr className="ms-rule" />
+            <p className="text-[15.5px] leading-relaxed">{item}</p>
+          </Card>
+        ))}
+      </Stagger>
+    </Section>
   );
 }

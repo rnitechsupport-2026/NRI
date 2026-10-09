@@ -42,6 +42,66 @@ const AMENITIES = [
 ];
 const someAmenities = (i) => AMENITIES.filter((_, k) => (k + i) % 3 !== 0).slice(0, 8);
 
+// What a listing can sensibly claim depends on what it is — a plot has no
+// lift, a warehouse no clubhouse. Apartments keep the rotating mix above.
+const HOME_AMENITIES = ['Power Backup', 'Covered Parking', 'Security', 'CCTV', 'Park', 'Rain Water Harvesting'];
+const WORK_AMENITIES = ['Power Backup', 'Covered Parking', 'Security', 'CCTV', 'Fire Safety', 'Visitor Parking'];
+const amenitiesFor = (ty, i) => ({
+  villa: [...HOME_AMENITIES, 'Swimming Pool', 'Clubhouse'],
+  'independent-house': HOME_AMENITIES,
+  farmhouse: HOME_AMENITIES,
+  plot: ['Security', 'Park', 'Rain Water Harvesting'],
+  office: ['Lift', ...WORK_AMENITIES],
+  shop: ['Lift', ...WORK_AMENITIES],
+  warehouse: WORK_AMENITIES,
+}[ty] || someAmenities(i));
+
+const MULTI_STOREY = ['apartment', 'office', 'shop'];
+const NO_FLOOR_PLAN = ['plot', 'warehouse', 'farmhouse'];
+const FLOOR_PLAN = '1503174971373-b1f69850bded';
+
+// ---------------------------------------------------------------- microsites
+// The standard property microsite (client: microsite/property/templates.js,
+// PROPERTY_SHOWCASE) — navbar, then these sections in this order. Listings
+// marked `ms` in PROPERTIES get one; the rest keep the plain detail page, so
+// a fresh seed has both kinds to check /property/:slug against.
+const MICROSITE_NAV = [
+  ['ms-hero', 'Home'], ['ms-overview', 'About'], ['ms-amenities', 'Amenities'],
+  ['ms-image-map', 'Explore'], ['ms-gallery', 'Gallery'], ['ms-enquiry', 'Contact'],
+].map(([key, label], order) => ({ key, label, visible: true, order }));
+
+// Image Mapping points, as % of the image — placed on the floor plan where the
+// listing has one, on its cover photo otherwise.
+const HOTSPOTS = {
+  home: [
+    { x: 28, y: 38, label: 'Living & dining', description: 'The main hall, opening onto the balcony.' },
+    { x: 66, y: 30, label: 'Master bedroom', description: 'With an attached bathroom and wardrobe space.' },
+    { x: 40, y: 72, label: 'Kitchen', description: 'With a separate utility area.' },
+  ],
+  work: [
+    { x: 30, y: 45, label: 'Main floor', description: 'Open, column-light floor plate.' },
+    { x: 70, y: 35, label: 'Entrance', description: 'Direct access from the main road.' },
+  ],
+  land: [
+    { x: 30, y: 60, label: 'Road frontage', description: 'Approach road along this edge.' },
+    { x: 68, y: 40, label: 'Plot boundary', description: 'Marked and fenced on site.' },
+  ],
+};
+const hotspotsFor = (ty) => (ty === 'plot' ? HOTSPOTS.land
+  : ['office', 'shop', 'warehouse'].includes(ty) ? HOTSPOTS.work : HOTSPOTS.home);
+
+function micrositeSections(p, { images, floorPlan }) {
+  return [
+    { sectionType: 'hero', settings: { height: 'tall', overlay: 0.5, images: images.slice(0, 3) } },
+    { sectionType: 'overview', sectionData: { heading: 'About' }, settings: { tone: 'light' } },
+    { sectionType: 'amenities', settings: { tone: 'dark' } },
+    { sectionType: 'imageMap', sectionData: { image: floorPlan || images[0], hotspots: hotspotsFor(p.ty) }, settings: { tone: 'light' } },
+    { sectionType: 'gallery', settings: { tone: 'light', columns: 3 } },
+    { sectionType: 'enquiryForm', sectionData: { heading: 'Contact' }, settings: { tone: 'light' } },
+    { sectionType: 'footer' },
+  ];
+}
+
 const uniqueSlug = (() => {
   const seen = new Map();
   return async (text, model) => {
@@ -70,27 +130,49 @@ const USERS = [
   { name: 'Portal Admin', email: 'admin@demo.com', phone: '9840099999', role: 'admin', city: 'Chennai', about: 'Platform administrator.', avatar: 8, verified: 1 },
 ];
 
+// `fl` / `furn` / `poss` pin a floor, furnishing or possession the title or
+// description states outright; anything not pinned is rotated in seed().
 const PROPERTIES = [
-  { t: '3 BHK Premium Apartment in Adyar with Sea Breeze', p: 'sale', ty: 'apartment', bhk: 3, ba: 3, area: 1650, price: 21500000, city: 'Chennai', loc: 'Adyar', o: 0, feat: 1, img: INTERIOR },
-  { t: '2 BHK Semi-Furnished Flat near Thiruvanmiyur Beach', p: 'rent', ty: 'apartment', bhk: 2, ba: 2, area: 1050, price: 32000, city: 'Chennai', loc: 'Thiruvanmiyur', o: 0, img: INTERIOR },
-  { t: 'DTCP Approved Residential Plot in Sholinganallur', p: 'sale', ty: 'plot', area: 2400, unit: 'sqft', price: 9600000, city: 'Chennai', loc: 'Sholinganallur', o: 0, img: LAND },
-  { t: '4 BHK Luxury Villa with Private Pool — ECR', p: 'sale', ty: 'villa', bhk: 4, ba: 5, area: 3800, price: 68000000, city: 'Chennai', loc: 'East Coast Road', o: 2, feat: 1, img: HOUSE },
-  { t: '2 BHK Fully Furnished Flat for IT Professionals — OMR', p: 'rent', ty: 'apartment', bhk: 2, ba: 2, area: 1120, price: 28500, city: 'Chennai', loc: 'OMR Perungudi', o: 4, feat: 1, img: INTERIOR },
-  { t: 'Independent House 3 BHK in Anna Nagar West', p: 'sale', ty: 'independent-house', bhk: 3, ba: 3, area: 2200, price: 32000000, city: 'Chennai', loc: 'Anna Nagar', o: 2, img: HOUSE },
-  { t: 'Furnished Office Space 4200 sqft — Guindy', p: 'lease', ty: 'office', area: 4200, price: 385000, city: 'Chennai', loc: 'Guindy', o: 2, img: COMMERCIAL },
-  { t: 'Retail Shop on Main Road — T Nagar', p: 'rent', ty: 'shop', area: 850, price: 145000, city: 'Chennai', loc: 'T Nagar', o: 4, img: COMMERCIAL },
-  { t: '3 BHK Gated Community Flat — Velachery', p: 'sale', ty: 'apartment', bhk: 3, ba: 2, area: 1420, price: 13200000, city: 'Chennai', loc: 'Velachery', o: 2, feat: 1, img: INTERIOR },
-  { t: '1 BHK Compact Flat close to Metro — Ashok Nagar', p: 'rent', ty: 'apartment', bhk: 1, ba: 1, area: 620, price: 16500, city: 'Chennai', loc: 'Ashok Nagar', o: 4, img: INTERIOR },
-  { t: '3 BHK Lake View Apartment — Whitefield', p: 'sale', ty: 'apartment', bhk: 3, ba: 3, area: 1780, price: 17800000, city: 'Bengaluru', loc: 'Whitefield', o: 3, feat: 1, img: BUILDING },
-  { t: '4 BHK Row Villa in Sarjapur Road', p: 'sale', ty: 'villa', bhk: 4, ba: 4, area: 2950, price: 29500000, city: 'Bengaluru', loc: 'Sarjapur Road', o: 3, img: HOUSE },
-  { t: '2 BHK Semi Furnished — Electronic City Phase 1', p: 'rent', ty: 'apartment', bhk: 2, ba: 2, area: 1080, price: 24000, city: 'Bengaluru', loc: 'Electronic City', o: 3, img: INTERIOR },
-  { t: '2 BHK Budget Flat near Saravanampatti IT Park', p: 'sale', ty: 'apartment', bhk: 2, ba: 2, area: 985, price: 5400000, city: 'Coimbatore', loc: 'Saravanampatti', o: 1, img: INTERIOR },
-  { t: 'Farmhouse with 1.2 Acre Land — Thondamuthur', p: 'sale', ty: 'farmhouse', bhk: 3, ba: 3, area: 52272, unit: 'sqft', price: 24000000, city: 'Coimbatore', loc: 'Thondamuthur', o: 1, img: HOUSE },
-  { t: '3 BHK Duplex in RS Puram', p: 'sale', ty: 'independent-house', bhk: 3, ba: 3, area: 2050, price: 15500000, city: 'Coimbatore', loc: 'RS Puram', o: 1, feat: 1, img: HOUSE },
-  { t: 'Warehouse 12000 sqft on Trichy Highway', p: 'lease', ty: 'warehouse', area: 12000, price: 420000, city: 'Coimbatore', loc: 'Trichy Road', o: 1, img: COMMERCIAL },
-  { t: 'Premium 3 BHK Sky Residence — Guindy', p: 'sale', ty: 'apartment', bhk: 3, ba: 3, area: 1890, price: 24500000, city: 'Chennai', loc: 'Guindy', o: 5, feat: 1, img: BUILDING },
-  { t: 'PG for Working Women — Sholinganallur (AC Twin Sharing)', p: 'pg', ty: 'apartment', bhk: 1, ba: 1, area: 320, price: 9500, city: 'Chennai', loc: 'Sholinganallur', o: 4, img: INTERIOR },
-  { t: 'Corner Plot 3600 sqft — Vandalur Kelambakkam Road', p: 'sale', ty: 'plot', area: 3600, price: 12600000, city: 'Chennai', loc: 'Kelambakkam', o: 0, img: LAND },
+  { t: '3 BHK Premium Apartment in Adyar with Sea Breeze', p: 'sale', ty: 'apartment', bhk: 3, ba: 3, area: 1650, price: 21500000, city: 'Chennai', loc: 'Adyar', o: 0, feat: 1, img: INTERIOR, ms: 'published',
+    d: 'East-facing corner flat on a quiet residential street, five minutes from Besant Nagar beach. Wide living-dining hall, three bedrooms with attached baths and a utility area off the kitchen.' },
+  { t: '2 BHK Semi-Furnished Flat near Thiruvanmiyur Beach', p: 'rent', ty: 'apartment', bhk: 2, ba: 2, area: 1050, price: 32000, city: 'Chennai', loc: 'Thiruvanmiyur', o: 0, img: INTERIOR, ms: 'published',
+    d: 'Bright second-floor flat a short walk from Thiruvanmiyur beach and the MRTS station. Wardrobes in both bedrooms, modular kitchen with chimney and hob, one covered car park.' },
+  { t: 'DTCP Approved Residential Plot in Sholinganallur', p: 'sale', ty: 'plot', area: 2400, unit: 'sqft', price: 9600000, city: 'Chennai', loc: 'Sholinganallur', o: 0, img: LAND, ms: 'published',
+    d: 'DTCP approved rectangular plot in a gated layout off the OMR service road. 30 ft blacktop road frontage, compound wall on three sides, ready for immediate construction.' },
+  { t: '4 BHK Luxury Villa with Private Pool — ECR', p: 'sale', ty: 'villa', bhk: 4, ba: 5, area: 3800, price: 68000000, city: 'Chennai', loc: 'East Coast Road', o: 2, feat: 1, img: HOUSE, ms: 'published',
+    d: 'Sea-facing villa on a 6,000 sqft plot with a private pool, landscaped lawn and home theatre. Four en-suite bedrooms, staff quarters and parking for four cars.' },
+  { t: '2 BHK Fully Furnished Flat for IT Professionals — OMR', p: 'rent', ty: 'apartment', bhk: 2, ba: 2, area: 1120, price: 28500, city: 'Chennai', loc: 'OMR Perungudi', o: 4, feat: 1, furn: 'fully-furnished', poss: 'ready-to-move', img: INTERIOR, ms: 'published',
+    d: 'Move-in ready flat inside a gated community next to the Perungudi tech parks. Fully furnished with beds, sofa, TV, fridge, washing machine and split ACs in every room.' },
+  { t: 'Independent House 3 BHK in Anna Nagar West', p: 'sale', ty: 'independent-house', bhk: 3, ba: 3, area: 2200, price: 32000000, city: 'Chennai', loc: 'Anna Nagar', o: 2, img: HOUSE, ms: 'published',
+    d: 'Ground-plus-one independent house on a 2,400 sqft plot in a calm Anna Nagar West avenue. Three bedrooms, pooja room, open terrace and car parking for two.' },
+  { t: 'Furnished Office Space 4200 sqft — Guindy', p: 'lease', ty: 'office', area: 4200, price: 385000, city: 'Chennai', loc: 'Guindy', o: 2, img: COMMERCIAL, ms: 'published',
+    d: 'Plug-and-play office floor with 60 workstations, three cabins, a 12-seater boardroom, server room and pantry. Two minutes from Guindy metro and Kathipara junction.' },
+  { t: 'Retail Shop on Main Road — T Nagar', p: 'rent', ty: 'shop', area: 850, price: 145000, city: 'Chennai', loc: 'T Nagar', o: 4, img: COMMERCIAL, ms: 'published',
+    d: 'Ground-floor retail unit with 25 ft frontage on a high-footfall T Nagar shopping stretch. Glass facade, mezzanine storage and a dedicated power connection.' },
+  { t: '3 BHK Gated Community Flat — Velachery', p: 'sale', ty: 'apartment', bhk: 3, ba: 2, area: 1420, price: 13200000, city: 'Chennai', loc: 'Velachery', o: 2, feat: 1, fl: 3, img: INTERIOR, ms: 'published',
+    d: 'Third-floor flat in a 220-unit gated community with clubhouse and pool. Cross-ventilated bedrooms, vitrified flooring and two balconies overlooking the central park.' },
+  { t: '1 BHK Compact Flat close to Metro — Ashok Nagar', p: 'rent', ty: 'apartment', bhk: 1, ba: 1, area: 620, price: 16500, city: 'Chennai', loc: 'Ashok Nagar', o: 4, img: INTERIOR, ms: 'published',
+    d: 'Compact one-bedroom flat 400 m from Ashok Nagar metro. Ideal for a working couple — modular kitchen, wardrobe, geyser and 24-hour water supply.' },
+  { t: '3 BHK Lake View Apartment — Whitefield', p: 'sale', ty: 'apartment', bhk: 3, ba: 3, area: 1780, price: 17800000, city: 'Bengaluru', loc: 'Whitefield', o: 3, feat: 1, img: BUILDING, ms: 'published',
+    d: 'High-floor apartment with uninterrupted views over Varthur lake. Three bedrooms, a study nook, deck balcony and two covered car parks, close to ITPL and the Whitefield metro.' },
+  { t: '4 BHK Row Villa in Sarjapur Road', p: 'sale', ty: 'villa', bhk: 4, ba: 4, area: 2950, price: 29500000, city: 'Bengaluru', loc: 'Sarjapur Road', o: 3, img: HOUSE, ms: 'published',
+    d: 'Row villa in a 90-home gated enclave off Sarjapur Road. Private garden, double-height living room, four bedrooms and a terrace sit-out, near leading international schools.' },
+  { t: '2 BHK Semi Furnished — Electronic City Phase 1', p: 'rent', ty: 'apartment', bhk: 2, ba: 2, area: 1080, price: 24000, city: 'Bengaluru', loc: 'Electronic City', o: 3, furn: 'semi-furnished', poss: 'ready-to-move', img: INTERIOR, ms: 'published',
+    d: 'Well-kept flat in Electronic City Phase 1, walking distance to the Infosys and Wipro campuses. Wardrobes, kitchen cabinets, lights and fans provided.' },
+  { t: '2 BHK Budget Flat near Saravanampatti IT Park', p: 'sale', ty: 'apartment', bhk: 2, ba: 2, area: 985, price: 5400000, city: 'Coimbatore', loc: 'Saravanampatti', o: 1, img: INTERIOR, ms: 'published',
+    d: 'Value-for-money flat 1.5 km from the Saravanampatti IT park. Two bedrooms, an east-facing balcony, covered parking and a low monthly maintenance.' },
+  { t: 'Farmhouse with 1.2 Acre Land — Thondamuthur', p: 'sale', ty: 'farmhouse', bhk: 3, ba: 3, area: 52272, unit: 'sqft', price: 24000000, city: 'Coimbatore', loc: 'Thondamuthur', o: 1, img: HOUSE,
+    d: 'Three-bedroom farmhouse set in 1.2 acres of coconut and mango grove at the foot of the Western Ghats. Borewell with three-phase power, caretaker room and a gated compound.' },
+  { t: '3 BHK Duplex in RS Puram', p: 'sale', ty: 'independent-house', bhk: 3, ba: 3, area: 2050, price: 15500000, city: 'Coimbatore', loc: 'RS Puram', o: 1, feat: 1, img: HOUSE, ms: 'published',
+    d: 'Duplex home in the heart of RS Puram, close to DB Road. Living, kitchen and a guest bedroom below; two bedrooms, a family lounge and an open terrace above.' },
+  { t: 'Warehouse 12000 sqft on Trichy Highway', p: 'lease', ty: 'warehouse', area: 12000, price: 420000, city: 'Coimbatore', loc: 'Trichy Road', o: 1, poss: 'ready-to-move', img: COMMERCIAL, ms: 'published',
+    d: 'Industrial warehouse with a 30 ft clear height, two dock-level loading bays, 100 kVA power and a 40 ft approach road directly off the Trichy highway.' },
+  { t: 'Premium 3 BHK Sky Residence — Guindy', p: 'sale', ty: 'apartment', bhk: 3, ba: 3, area: 1890, price: 24500000, city: 'Chennai', loc: 'Guindy', o: 5, feat: 1, fl: 12, img: BUILDING, ms: 'published',
+    d: 'Sky residence on the 12th floor with a wraparound balcony and city skyline views. Italian marble flooring, VRV air-conditioning and a private lift lobby.' },
+  { t: 'PG for Working Women — Sholinganallur (AC Twin Sharing)', p: 'pg', ty: 'apartment', bhk: 1, ba: 1, area: 320, price: 9500, city: 'Chennai', loc: 'Sholinganallur', o: 4, img: INTERIOR, ms: 'published',
+    d: 'AC twin-sharing rooms for working women with three meals a day, housekeeping, Wi-Fi and a biometric entry. Ten minutes to the Sholinganallur junction tech parks.' },
+  { t: 'Corner Plot 3600 sqft — Vandalur Kelambakkam Road', p: 'sale', ty: 'plot', area: 3600, price: 12600000, city: 'Chennai', loc: 'Kelambakkam', o: 0, img: LAND,
+    d: 'North-east corner plot with road on two sides on the Vandalur–Kelambakkam road. Patta land with clear title, close to upcoming residential projects and colleges.' },
 ];
 
 const PROJECTS = [
@@ -126,12 +208,26 @@ async function seed() {
   const ServiceOffering = require('../models/ServiceOffering');
   const Lead = require('../models/Lead');
   const PriceHistory = require('../models/PriceHistory');
+  const Microsite = require('../models/Microsite');
+  const MicrositeSection = require('../models/MicrositeSection');
 
   await User.deleteMany({});
   await Property.deleteMany({});
   await Project.deleteMany({});
   await ServiceOffering.deleteMany({});
   await Lead.deleteMany({});
+  // Everything below hangs off the properties/projects just wiped — left
+  // behind, these would point at listings that no longer exist (and an old
+  // microsite would keep its slug reserved against the new one).
+  await PropertyImage.deleteMany({});
+  await ProjectImage.deleteMany({});
+  await PriceHistory.deleteMany({});
+  await Microsite.deleteMany({});
+  await MicrositeSection.deleteMany({});
+  // Interactive plot / flat maps hang off the listings too.
+  await require('../models/PlotMap').deleteMany({});
+  await require('../models/PlotMapUnit').deleteMany({});
+  await require('../models/PublishedMap').deleteMany({});
 
   const userIds = [];
   for (const u of USERS) {
@@ -157,30 +253,36 @@ async function seed() {
   console.log(`  users: ${userIds.length}`);
 
   let propCount = 0;
+  const msCount = { published: 0, draft: 0 };
   for (let i = 0; i < PROPERTIES.length; i++) {
     const p = PROPERTIES[i];
     const gallery = [pick(p.img, i), pick(p.img, i + 1), pick(p.img, i + 2), pick(INTERIOR, i + 3)];
     const cover = IMG(gallery[0]);
     const slug = await uniqueSlug(p.t, Property);
+    const isPlot = p.ty === 'plot';
+    const multiStorey = MULTI_STOREY.includes(p.ty);
+    const possession = isPlot ? null : p.poss || (i % 4 === 0 ? 'under-construction' : 'ready-to-move');
+    const floorPlan = NO_FLOOR_PLAN.includes(p.ty) ? null : IMG(FLOOR_PLAN);
 
     const property = await Property.create({
       user: userIds[p.o],
       title: p.t,
       slug,
-      description: `${p.t}. Well maintained ${p.ty.replace('-', ' ')} located in ${p.loc}, ${p.city}. ` +
-        `Excellent connectivity to schools, hospitals, supermarkets and IT corridors. ` +
+      description: `${p.d}\n\nLocated in ${p.loc}, ${p.city}. ` +
         `Clear title, all documents available for verification. Immediate site visit possible.`,
       purpose: p.p,
       propertyType: p.ty,
       bhk: p.bhk || null,
       bathrooms: p.ba || null,
       balconies: p.bhk ? Math.max(1, p.bhk - 1) : null,
-      furnishing: i % 3 === 0 ? 'fully-furnished' : i % 3 === 1 ? 'semi-furnished' : 'unfurnished',
+      furnishing: isPlot || p.ty === 'warehouse' ? null
+        : p.furn ? p.furn
+        : i % 3 === 0 ? 'fully-furnished' : i % 3 === 1 ? 'semi-furnished' : 'unfurnished',
       facing: ['East', 'North', 'North-East', 'West', 'South'][i % 5],
-      floorNo: p.ty === 'plot' || p.ty === 'farmhouse' ? null : (i % 12) + 1,
-      totalFloors: p.ty === 'plot' || p.ty === 'farmhouse' ? null : 14,
-      ageYears: (i % 9),
-      possession: i % 4 === 0 ? 'under-construction' : 'ready-to-move',
+      floorNo: multiStorey ? p.fl || (i % 12) + 1 : null,
+      totalFloors: multiStorey ? 14 : null,
+      ageYears: isPlot ? null : possession === 'under-construction' ? 0 : 1 + (i % 9),
+      possession,
       builtUpArea: p.area,
       carpetArea: Math.round(p.area * 0.82),
       areaUnit: p.unit || 'sqft',
@@ -192,11 +294,11 @@ async function seed() {
       city: p.city,
       state: p.city === 'Bengaluru' ? 'Karnataka' : 'Tamil Nadu',
       pincode: p.city === 'Chennai' ? '600041' : p.city === 'Bengaluru' ? '560066' : '641035',
-      amenities: someAmenities(i),
+      amenities: amenitiesFor(p.ty, i),
       coverImage: cover,
       tourUrl: i % 2 === 0 ? TOURS[(i / 2) % TOURS.length].url : null,
       tourProvider: i % 2 === 0 ? TOURS[(i / 2) % TOURS.length].provider : null,
-      floorPlanUrl: i % 3 === 0 ? IMG('1503174971373-b1f69850bded') : null,
+      floorPlanUrl: floorPlan,
       isFeatured: p.feat || 0,
       isVerified: i % 2 === 0 ? true : false,
       status: 'active',
@@ -205,8 +307,26 @@ async function seed() {
 
     await PropertyImage.insertMany(gallery.map((url, g) => ({ property: property._id, url: IMG(url), sortOrder: g })));
     propCount++;
+
+    if (p.ms) {
+      const microsite = await Microsite.create({
+        property: property._id,
+        createdBy: userIds[p.o],
+        templateId: 'property-showcase',
+        status: p.ms,
+        slug,
+        navbar: { showLogo: true, background: '#ffffff', sticky: true, items: MICROSITE_NAV },
+        publishedAt: p.ms === 'published' ? new Date() : undefined,
+      });
+      const images = [...new Set(gallery.map((url) => IMG(url)))];
+      await MicrositeSection.insertMany(
+        micrositeSections(p, { images, floorPlan }).map((sec, order) => ({ ...sec, microsite: microsite._id, sectionOrder: order }))
+      );
+      msCount[p.ms]++;
+    }
   }
   console.log(`  properties: ${propCount}`);
+  console.log(`  microsites: ${msCount.published} published, ${msCount.draft} draft`);
 
   const projectIds = [];
   for (let i = 0; i < PROJECTS.length; i++) {

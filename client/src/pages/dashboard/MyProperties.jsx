@@ -4,8 +4,11 @@ import api, { errMsg } from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import { Empty, Modal, PageLoader } from '../../components/ui.jsx';
 import { money, timeAgo, titleCase, PURPOSE_LABEL, shareUrl } from '../../utils/format.js';
-import { Home, Plus, Edit, Trash, Eye, Inbox, Cube, ArrowRight, Send, Layers } from '../../components/Icons.jsx';
+import { Home, Plus, Edit, Trash, Eye, Inbox, Cube, ArrowRight, Send, Layers, Grid } from '../../components/Icons.jsx';
 
+import { propertyReview } from './admin/verificationLabels.js';
+
+const FILTER_LABEL = { all: 'All', pending: 'Under Verification', rejected: 'Rejected', active: 'Approved · Live', inactive: 'Paused', sold: 'Sold', rented: 'Rented' };
 const STATUS_CLS = {
   active: 'badge-green', pending: 'badge-amber', sold: 'badge-navy',
   rented: 'badge-blue', inactive: 'badge-outline',
@@ -88,14 +91,14 @@ export default function MyProperties() {
       {rows.length === 0 ? (
         <Empty icon={Home} title="You haven't posted a property yet"
                action={<Link to="/dashboard/property/new" className="btn btn-primary"><Plus /> Post your first property</Link>}>
-          Listings are free and go live instantly. Add photos and a 3D walkthrough to get more enquiries.
+          Listings are free. Each one is verified by our team before it goes live. Add photos and a 3D walkthrough to get more enquiries.
         </Empty>
       ) : (
         <>
           <div className="pills">
-            {['all', 'active', 'inactive', 'sold', 'rented'].map((s) => (
+            {['all', 'pending', 'active', 'rejected', 'inactive', 'sold', 'rented'].map((s) => (
               <button key={s} className={`pill ${filter === s ? 'on' : ''}`} onClick={() => setFilter(s)}>
-                {titleCase(s)} <span className="tiny muted">({counts[s] || 0})</span>
+                {FILTER_LABEL[s]} <span className="tiny muted">({counts[s] || 0})</span>
               </button>
             ))}
           </div>
@@ -125,13 +128,23 @@ export default function MyProperties() {
                     </td>
                     <td className="strong nowrap">{money(p.price)}</td>
                     <td>
-                      <select className="select btn-xs" style={{ height: 32, fontSize: '.78rem', width: 118 }}
-                              value={p.status} onChange={(e) => setStatus(p, e.target.value)}>
-                        <option value="active">Active</option>
-                        <option value="inactive">Paused</option>
-                        <option value="sold">Sold</option>
-                        <option value="rented">Rented</option>
-                      </select>
+                      {/* verification first: a listing is not live until our team approves it */}
+                      <span className={`badge ${propertyReview(p.status).cls}`}>{propertyReview(p.status).label}</span>
+                      {p.status === 'pending' && <div className="tiny muted mt-1" style={{ maxWidth: 170 }}>Not live yet — our team is reviewing it.</div>}
+                      {p.status === 'rejected' && (
+                        <div className="tiny mt-1" style={{ maxWidth: 190, color: '#b42318' }}>
+                          {p.review_note || 'Not approved.'} <Link to={`/dashboard/property/${p.id}/edit`} className="strong" style={{ textDecoration: 'underline' }}>Edit to resubmit</Link>
+                        </div>
+                      )}
+                      {p.status !== 'pending' && p.status !== 'rejected' && (
+                        <select className="select btn-xs mt-1" style={{ height: 30, fontSize: '.76rem', width: 118, display: 'block' }}
+                                value={p.status} onChange={(e) => setStatus(p, e.target.value)} aria-label="Listing status">
+                          <option value="active">Live</option>
+                          <option value="inactive">Paused</option>
+                          <option value="sold">Sold</option>
+                          <option value="rented">Rented</option>
+                        </select>
+                      )}
                     </td>
                     <td><span className="row" style={{ gap: 5 }}><Eye style={{ width: 14, height: 14, color: 'var(--muted)' }} /> {p.views}</span></td>
                     <td>
@@ -151,6 +164,10 @@ export default function MyProperties() {
                         </Link>
                         <Link to={`/dashboard/property/${p.id}/edit`} className="btn btn-xs btn-outline" title="Edit">
                           <Edit />
+                        </Link>
+                        <Link to={`/dashboard/property/${p.id}/mapping`} className="btn btn-xs btn-outline"
+                              title={p.property_type === 'apartment' ? 'Map flats floor by floor' : 'Map plots'}>
+                          <Grid />
                         </Link>
                         <Link to={micrositeByProperty[p.id] ? `/dashboard/microsites/${micrositeByProperty[p.id]}/build` : `/dashboard/microsites/new?propertyId=${p.id}`}
                               className="btn btn-xs btn-outline" title={micrositeByProperty[p.id] ? 'Manage Microsite' : 'Create Microsite'}>

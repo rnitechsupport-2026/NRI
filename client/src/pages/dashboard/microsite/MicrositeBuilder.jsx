@@ -17,6 +17,9 @@ import MicrositeRenderer from '../../../microsite/property/MicrositeRenderer.jsx
 import IframePreview from '../../../microsite/property/IframePreview.jsx';
 import { SECTION_REGISTRY } from '../../../microsite/property/registry.js';
 import { resolveTheme } from '../../../microsite/property/theme.js';
+import {
+  propertyImages, heroSlides, imageMapSource, normalizeHotspots, HERO_SLIDE_LIMIT, HOTSPOT_LIMIT,
+} from '../../../microsite/property/media.js';
 
 const GROUPS = ['Basic', 'Property', 'Lead Generation', 'Other'];
 const WIDTHS = { desktop: '100%', tablet: '768px', mobile: '390px' };
@@ -269,7 +272,7 @@ export default function MicrositeBuilder() {
         <div className="card card-p stack" style={{ gap: 14, maxHeight: '80vh', overflowY: 'auto' }}>
           {panel === 'section' && (
             selected ? (
-              <SectionSettings section={selected} onData={(p) => updateSectionData(selected._localId, p)}
+              <SectionSettings section={selected} property={property} onData={(p) => updateSectionData(selected._localId, p)}
                                 onSettings={(p) => updateSectionSettings(selected._localId, p)} />
             ) : <p className="muted small">Select a section to edit its settings, or add one from the left.</p>
           )}
@@ -277,7 +280,7 @@ export default function MicrositeBuilder() {
             <ThemeSettings theme={microsite.theme} onChange={(t) => setMicrosite((m) => ({ ...m, theme: { ...m.theme, ...t } }))} />
           )}
           {panel === 'navbar' && (
-            <NavbarSettings navbar={microsite.navbar} onChange={(n) => setMicrosite((m) => ({ ...m, navbar: { ...m.navbar, ...n } }))} />
+            <NavbarSettings navbar={microsite.navbar} property={property} onChange={(n) => setMicrosite((m) => ({ ...m, navbar: { ...m.navbar, ...n } }))} />
           )}
         </div>
       </div>
@@ -294,7 +297,115 @@ function Row({ label, children }) {
   );
 }
 
-function SectionSettings({ section, onData, onSettings }) {
+/** Thumbnails of the listing's own photos to pick from — `selected` is the
+ *  list of chosen URLs, in the order they were picked. */
+function ImageChooser({ images, selected, onToggle }) {
+  if (!images.length) return <p className="tiny muted">This listing has no photos yet.</p>;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+      {images.map((src) => {
+        const pos = selected.indexOf(src);
+        return (
+          <button key={src} type="button" onClick={() => onToggle(src)} title={pos >= 0 ? 'Selected' : 'Select'}
+                  style={{ position: 'relative', padding: 0, border: pos >= 0 ? '2px solid var(--navy-800, #0e2a4e)' : '2px solid transparent', borderRadius: 6, overflow: 'hidden', aspectRatio: '4 / 3', cursor: 'pointer', background: 'var(--line)' }}>
+            <img src={src} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: pos >= 0 ? 1 : 0.7 }} />
+            {pos >= 0 && selected.length > 1 && (
+              <span style={{ position: 'absolute', top: 2, left: 2, minWidth: 16, height: 16, borderRadius: 8, background: 'var(--navy-800, #0e2a4e)', color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{pos + 1}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Image Mapping editor: pick the image, click it to drop a numbered point,
+ *  then caption each point. Points are stored as % of the image so they hold
+ *  their place at any screen size. */
+function ImageMapEditor({ property, data, onData }) {
+  const hotspots = normalizeHotspots(data.hotspots);
+  const image = imageMapSource(property, data);
+  const choices = [...new Set([property.floor_plan_url, ...propertyImages(property)].filter(Boolean))];
+  const full = hotspots.length >= HOTSPOT_LIMIT;
+
+  function addPoint(e) {
+    if (full) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1000) / 10;
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 1000) / 10;
+    onData({ image, hotspots: [...hotspots, { x, y, label: '', description: '' }] });
+  }
+  function updatePoint(i, patch) {
+    onData({ hotspots: hotspots.map((h, idx) => (idx === i ? { ...h, ...patch } : h)) });
+  }
+
+  const plotMap = property.plot_map;
+  const mappingLink = property.entity_type === 'property' && (
+    <a href={`/dashboard/property/${property.id}/mapping`} target="_blank" rel="noreferrer" className="btn btn-xs btn-outline" style={{ alignSelf: 'flex-start' }}>
+      {plotMap ? 'Open the mapping editor' : 'Map plots / flats with status'}
+    </a>
+  );
+
+  // A listing with a plot map shows that map here — nothing to place by hand.
+  if (plotMap) {
+    const flats = plotMap.project.type === 'APARTMENT';
+    return (
+      <>
+        <Row label="Subheading"><input className="input input-sm" value={data.subheading || ''} onChange={(e) => onData({ subheading: e.target.value })} /></Row>
+        <p className="tiny muted">
+          This section shows the listing's interactive {flats ? 'flat' : 'plot'} map: {plotMap.statistics.total} {flats ? 'flat' : 'plot'}{plotMap.statistics.total === 1 ? '' : 's'}
+          {flats ? ` across ${plotMap.floors.length} floor${plotMap.floors.length === 1 ? '' : 's'}, all on one image` : ' on one layout image'}.
+          Publishing this microsite also publishes the map.
+        </p>
+        {mappingLink}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {mappingLink && (
+        <div className="stack" style={{ gap: 6 }}>
+          <p className="tiny muted">For plots or flats with availability, status colours and details, use the mapping editor — its map replaces the points below.</p>
+          {mappingLink}
+        </div>
+      )}
+      <Row label="Subheading"><input className="input input-sm" value={data.subheading || ''} onChange={(e) => onData({ subheading: e.target.value })} /></Row>
+      <Row label="Image (from this listing)">
+        <ImageChooser images={choices} selected={image ? [image] : []} onToggle={(src) => onData({ image: src })} />
+      </Row>
+      <Row label="…or image URL"><input className="input input-sm" value={data.image || ''} onChange={(e) => onData({ image: e.target.value })} /></Row>
+
+      {image ? (
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="tiny muted">{full ? `Maximum of ${HOTSPOT_LIMIT} points reached` : 'Click the image to add a point'}</span>
+          <div onClick={addPoint} style={{ position: 'relative', cursor: full ? 'default' : 'crosshair', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--line)' }}>
+            <img src={image} alt="" style={{ width: '100%', display: 'block' }} />
+            {hotspots.map((h, i) => (
+              <span key={i} style={{ position: 'absolute', left: `${h.x}%`, top: `${h.y}%`, transform: 'translate(-50%, -50%)', width: 20, height: 20, borderRadius: 10, background: '#e4a11b', border: '2px solid #fff', color: '#1a1a1a', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', pointerEvents: 'none', boxShadow: '0 1px 4px rgba(0,0,0,.4)' }}>{i + 1}</span>
+            ))}
+          </div>
+        </div>
+      ) : <p className="tiny muted">Add a photo or floor plan to this listing, or paste an image URL above, to start mapping.</p>}
+
+      {hotspots.map((h, i) => (
+        <div key={i} className="card card-p stack" style={{ gap: 6, padding: 8 }}>
+          <div className="row-between">
+            <span className="tiny strong">Point {i + 1}</span>
+            <button type="button" className="btn btn-xs" style={{ background: 'transparent', color: 'var(--red-600, #dc2626)' }} title="Remove point"
+                    onClick={() => onData({ hotspots: hotspots.filter((_, idx) => idx !== i) })}>
+              <Trash style={{ width: 14, height: 14 }} />
+            </button>
+          </div>
+          <input className="input input-sm" placeholder="Label (e.g. Master bedroom)" value={h.label} onChange={(e) => updatePoint(i, { label: e.target.value })} />
+          <input className="input input-sm" placeholder="Description (optional)" value={h.description} onChange={(e) => updatePoint(i, { description: e.target.value })} />
+        </div>
+      ))}
+    </>
+  );
+}
+
+function SectionSettings({ section, property, onData, onSettings }) {
   const type = section.sectionType;
   const data = section.sectionData || {};
   const settings = section.settings || {};
@@ -330,7 +441,7 @@ function SectionSettings({ section, onData, onSettings }) {
     <div className="stack" style={{ gap: 10 }}>
       <div className="strong small">{label} settings</div>
 
-      {(type === 'hero' || type === 'splitHero' || type === 'overview' || type === 'highlights' || type === 'gallery' || type === 'masonryGallery' || type === 'amenities' ||
+      {(type === 'hero' || type === 'splitHero' || type === 'overview' || type === 'highlights' || type === 'imageMap' || type === 'gallery' || type === 'masonryGallery' || type === 'amenities' ||
         type === 'floorPlan' || type === 'location' || type === 'ownerInfo' || type === 'pricing' || type === 'enquiryForm' ||
         type === 'callCta' || type === 'whatsappCta' || type === 'siteVisitCta' || type === 'brochureCta' ||
         type === 'testimonials' || type === 'faq' || type === 'text') && type !== 'splitHero' && (
@@ -348,6 +459,17 @@ function SectionSettings({ section, onData, onSettings }) {
       )}
       {type === 'hero' && (
         <>
+          <Row label={`Background photos (up to ${HERO_SLIDE_LIMIT}, visitors can scroll through them)`}>
+            <ImageChooser
+              images={propertyImages(property)}
+              selected={heroSlides(property, settings)}
+              onToggle={(src) => {
+                const cur = heroSlides(property, settings);
+                const next = cur.includes(src) ? cur.filter((u) => u !== src) : [...cur, src].slice(-HERO_SLIDE_LIMIT);
+                onSettings({ images: next });
+              }}
+            />
+          </Row>
           <Row label="Alignment">
             <select className="select select-sm" value={settings.alignment || 'center'} onChange={(e) => onSettings({ alignment: e.target.value })}>
               <option value="center">Center</option><option value="left">Left</option>
@@ -377,6 +499,8 @@ function SectionSettings({ section, onData, onSettings }) {
       {(type === 'callCta' || type === 'whatsappCta' || type === 'siteVisitCta' || type === 'brochureCta') && (
         <Row label="Description"><textarea className="textarea" rows={2} value={data.description || ''} onChange={(e) => onData({ description: e.target.value })} /></Row>
       )}
+
+      {type === 'imageMap' && <ImageMapEditor property={property} data={data} onData={onData} />}
 
       {type === 'gallery' && (
         <>
@@ -446,7 +570,7 @@ function ThemeSettings({ theme, onChange }) {
   );
 }
 
-function NavbarSettings({ navbar = {}, onChange }) {
+function NavbarSettings({ navbar = {}, property, onChange }) {
   const items = navbar.items || [];
   function updateItem(i, patch) {
     const next = [...items];
@@ -456,6 +580,18 @@ function NavbarSettings({ navbar = {}, onChange }) {
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="strong small">Navbar</div>
+      <label className="row" style={{ gap: 8 }}>
+        <input type="checkbox" checked={navbar.showLogo !== false} onChange={(e) => onChange({ showLogo: e.target.checked })} />
+        <span className="small">Show logo</span>
+      </label>
+      {navbar.showLogo !== false && (
+        <Row label={property?.owner_avatar ? 'Logo URL (blank = your profile logo)' : 'Logo URL (or add a logo to your profile)'}>
+          <input className="input input-sm" value={navbar.logoUrl || ''} onChange={(e) => onChange({ logoUrl: e.target.value })} />
+        </Row>
+      )}
+      <Row label="Button text (blank = Enquire Now)">
+        <input className="input input-sm" maxLength={40} value={navbar.ctaLabel || ''} onChange={(e) => onChange({ ctaLabel: e.target.value })} />
+      </Row>
       <Row label="Background color">
         <input type="color" value={navbar.background || '#ffffff'} onChange={(e) => onChange({ background: e.target.value })} style={{ height: 32, width: '100%' }} />
       </Row>

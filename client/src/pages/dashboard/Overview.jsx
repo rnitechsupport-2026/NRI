@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
@@ -26,10 +26,15 @@ export default function Overview() {
   const { user } = useAuth();
   const [d, setD] = useState(null);
 
-  useEffect(() => {
-    api.get('/stats/dashboard').then((r) => setD(r.data.data)).catch(() => setD({}));
-  }, []);
+  // An employee has no listings of their own — their dashboard is the Employee Portal.
+  const isEmployee = user.role === 'employee';
 
+  useEffect(() => {
+    if (isEmployee) return;
+    api.get('/stats/dashboard').then((r) => setD(r.data.data)).catch(() => setD({}));
+  }, [isEmployee]);
+
+  if (isEmployee) return <Navigate to="/staff" replace />;
   if (!d) return <PageLoader label="Loading your dashboard…" />;
 
   const kpis = [

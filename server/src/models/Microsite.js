@@ -19,7 +19,7 @@ const micrositeSchema = new mongoose.Schema(
     property: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', unique: true, sparse: true, index: true },
     project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', unique: true, sparse: true, index: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    templateId: { type: String, enum: ['premium-luxury', 'modern-real-estate', 'lead-generation', 'editorial', 'custom'], default: 'custom' },
+    templateId: { type: String, enum: ['property-showcase', 'premium-luxury', 'modern-real-estate', 'lead-generation', 'editorial', 'custom'], default: 'custom' },
     status: { type: String, enum: ['draft', 'published'], default: 'draft' },
     slug: { type: String, required: true, unique: true, trim: true, maxlength: 240 },
     theme: {
@@ -35,6 +35,8 @@ const micrositeSchema = new mongoose.Schema(
     navbar: {
       showLogo: { type: Boolean, default: true },
       logoUrl: { type: String, default: '' },
+      ctaLabel: { type: String, default: '', trim: true, maxlength: 40 },
+      ctaLink: { type: String, default: '', trim: true, maxlength: 400 },
       background: { type: String, default: '#ffffff' },
       sticky: { type: Boolean, default: true },
       items: { type: [navItemSchema], default: [] },

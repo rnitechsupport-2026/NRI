@@ -1,10 +1,10 @@
-import { motion } from 'framer-motion';
 import { Bed, Bath, Ruler, Sofa, Compass, Stairs, Clock, Grid, Building, Layers } from '../../../components/Icons.jsx';
 import { area, titleCase, rupees, shortDate } from '../../../utils/format.js';
-import { toneStyle, headingFontClass, cardStyle } from '../theme.js';
-import FadeIn from '../FadeIn.jsx';
+import Section, { SectionHeading } from '../Section.jsx';
+import Card from '../Card.jsx';
+import { Reveal, Stagger, StaggerItem } from '../motion.jsx';
 
-export default function Overview({ property: p, data = {}, settings = {}, theme }) {
+export default function Overview({ anchorId = 'ms-overview', property: p, data = {}, settings = {} }) {
   const tone = settings.tone || 'light';
   const isProject = p.entity_type === 'project';
 
@@ -17,11 +17,11 @@ export default function Overview({ property: p, data = {}, settings = {}, theme 
   ].filter((f) => f.value) : [
     { icon: Bed, label: 'Bedrooms', value: p.bhk ? `${p.bhk} BHK` : null },
     { icon: Bath, label: 'Bathrooms', value: p.bathrooms || null },
-    { icon: Ruler, label: 'Built-up area', value: area(p.built_up_area, p.area_unit) },
+    { icon: Ruler, label: 'Built-up area', value: p.built_up_area ? area(p.built_up_area, p.area_unit) : null },
     { icon: Sofa, label: 'Furnishing', value: p.furnishing ? titleCase(p.furnishing).replace('-', ' ') : null },
     { icon: Compass, label: 'Facing', value: p.facing || null },
     { icon: Stairs, label: 'Floor', value: p.floor_no ? `${p.floor_no} of ${p.total_floors || '—'}` : null },
-    { icon: Clock, label: 'Possession', value: p.possession ? titleCase(p.possession) : null },
+    { icon: Clock, label: 'Possession', value: p.possession ? titleCase(p.possession).replace(/-/g, ' ') : null },
   ].filter((f) => f.value);
 
   const specs = isProject ? [
@@ -29,61 +29,49 @@ export default function Overview({ property: p, data = {}, settings = {}, theme 
     ['RERA number', p.rera_no || null],
   ].filter(([, v]) => v) : [
     ['Property type', titleCase(p.property_type)],
-    ['Carpet area', area(p.carpet_area, p.area_unit)],
+    ['Carpet area', p.carpet_area ? area(p.carpet_area, p.area_unit) : null],
     ['Age', p.age_years != null ? `${p.age_years} years` : null],
     ['Maintenance', p.maintenance ? `${rupees(p.maintenance)} / month` : null],
   ].filter(([, v]) => v);
 
   return (
-    <section id="ms-overview" className="px-6" style={{ ...toneStyle(theme, tone), paddingTop: 'var(--ms-pad-y)', paddingBottom: 'var(--ms-pad-y)' }}>
-      <div className="mx-auto max-w-5xl">
-        <FadeIn>
-          <h2 className={`${headingFontClass(theme)} mb-8 text-3xl font-semibold`}>{data.heading || (isProject ? 'Project Overview' : 'Property Overview')}</h2>
-        </FadeIn>
+    <Section id={anchorId} tone={tone}>
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+        {/* the story stays in view on the left while the facts scroll past */}
+        <div className="flex flex-col gap-6 lg:sticky lg:top-28 lg:self-start">
+          <SectionHeading eyebrow={isProject ? 'The project' : 'The property'} title={data.heading || (isProject ? 'Project Overview' : 'Property Overview')} />
+          {p.description && (
+            <Reveal delay={0.1}><p className="ms-lead whitespace-pre-line">{p.description}</p></Reveal>
+          )}
+        </div>
 
-        {facts.length > 0 && (
-          <div className="mb-10 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-            {facts.map((f, i) => (
-              <FadeIn key={f.label} delay={i * 0.05}>
-                <motion.div
-                  whileHover={{ y: -4 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                  className="flex h-full flex-col items-center gap-2 p-5 text-center"
-                  style={cardStyle(tone)}
-                >
-                  <span
-                    className="flex h-11 w-11 items-center justify-center rounded-full"
-                    style={{ background: `${theme.primaryColor}14` }}
-                  >
-                    <f.icon style={{ width: 20, height: 20, color: theme.primaryColor }} />
-                  </span>
-                  <b className="text-sm">{f.value}</b>
-                  <span className="text-xs opacity-70">{f.label}</span>
-                </motion.div>
-              </FadeIn>
-            ))}
-          </div>
-        )}
-
-        {p.description && (
-          <FadeIn>
-            <p className="mb-8 max-w-3xl whitespace-pre-line text-[15.5px] leading-[1.75] opacity-90">{p.description}</p>
-          </FadeIn>
-        )}
-
-        {specs.length > 0 && (
-          <FadeIn>
-            <div className="grid grid-cols-1 gap-x-10 gap-y-3 sm:grid-cols-2">
-              {specs.map(([k, v]) => (
-                <div key={k} className="flex justify-between border-b py-2 text-sm" style={{ borderColor: 'rgba(127,127,127,0.15)' }}>
-                  <span className="opacity-70">{k}</span>
-                  <b>{v}</b>
-                </div>
+        <div className="flex flex-col gap-8">
+          {facts.length > 0 && (
+            <Stagger className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+              {facts.map((f) => (
+                <Card key={f.label} className="flex flex-col gap-4 p-4 sm:p-5">
+                  <span className="ms-icon"><f.icon /></span>
+                  <div>
+                    <div className="ms-display text-lg font-semibold leading-tight sm:text-xl">{f.value}</div>
+                    <div className="ms-muted mt-1 text-xs font-medium uppercase tracking-[0.14em]">{f.label}</div>
+                  </div>
+                </Card>
               ))}
-            </div>
-          </FadeIn>
-        )}
+            </Stagger>
+          )}
+
+          {specs.length > 0 && (
+            <Stagger as="dl" className="grid grid-cols-1 gap-x-10 sm:grid-cols-2" style={{ margin: 0 }}>
+              {specs.map(([k, v]) => (
+                <StaggerItem key={k} className="flex items-baseline justify-between gap-4 py-3.5 text-sm" style={{ borderBottom: '1px solid var(--ms-card-line)' }}>
+                  <dt className="ms-muted">{k}</dt>
+                  <dd className="text-right font-semibold" style={{ margin: 0 }}>{v}</dd>
+                </StaggerItem>
+              ))}
+            </Stagger>
+          )}
+        </div>
       </div>
-    </section>
+    </Section>
   );
 }

@@ -22,7 +22,16 @@ const userSchema = new mongoose.Schema(
     status: { type: String, enum: ['active', 'suspended'], default: 'active' },
     approvalStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'approved' },
     lastLoginAt: { type: Date },
+    // Employees only — who they are in charge of (services/staffScope.js):
+    // whole user types, and/or specific users picked by the admin.
     managedPortals: { type: [String], enum: ['owner', 'agent', 'builder', 'service'], default: [] },
+    assignedUsers: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
+    // Set while an employee is still on the default / reset password.
+    mustChangePassword: { type: Boolean, default: false },
+    // Who took the last approve / reject decision on this account, and why.
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    approvedAt: { type: Date },
+    approvalNote: { type: String, trim: true, maxlength: 500 },
   },
   { timestamps: true }
 );

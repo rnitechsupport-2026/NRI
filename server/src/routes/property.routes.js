@@ -12,6 +12,17 @@ const { buildFilterFromParams: buildFilter, SORTS } = require('../services/filte
 const { requireAuth, optionalAuth, requireRole, requireApproved } = require('../middleware/auth');
 const { asyncHandler, makeSlug, nn, parseJson, paginate, HttpError, toSnakeCase } = require('../utils/helpers');
 const { parseTourEmbed, allowedHosts } = require('../utils/embed');
+const Notification = require('../models/Notification');
+const { managesUserId, reviewersFor } = require('../services/staffScope');
+
+// A listing that is under verification or was rejected is not public: only
+// its owner, an admin, or the employee assigned to that owner may open it.
+const UNLISTED = ['pending', 'rejected'];
+async function canSeeUnlisted(user, ownerId) {
+  if (!user) return false;
+  if (String(user._id) === String(ownerId)) return true;
+  return managesUserId(user, ownerId);
+}
 
 const CARD_FIELDS = 'title slug purpose propertyType bhk bathrooms builtUpArea areaUnit price priceNegotiable furnishing possession locality city coverImage tourUrl isFeatured isVerified status views createdAt';
 
@@ -131,7 +142,7 @@ router.get('/share/:idOrSlug', asyncHandler(async (req, res) => {
     .populate({ path: 'user', select: 'name role companyName phone isVerified' })
     .lean();
 
-  if (!property) return res.redirect(302, clientOrigin);
+  if (!property || UNLISTED.includes(property.status)) return res.redirect(302, clientOrigin);
 
   const targetUrl = `${clientOrigin}/property/${property.slug || key}`;
   const isBot = BOT_UA_RE.test(req.get('user-agent') || '');
@@ -273,6 +284,9 @@ router.get('/:idOrSlug', optionalAuth, asyncHandler(async (req, res) => {
     .lean();
 
   if (!property) throw new HttpError(404, 'Property not found');
+  if (UNLISTED.includes(property.status) && !(await canSeeUnlisted(req.user, property.user?._id))) {
+    throw new HttpError(404, 'Property not found');
+  }
 
   await Property.findByIdAndUpdate(property._id, { $inc: { views: 1 } });
   property.views = (property.views || 0) + 1;
@@ -395,8 +409,20 @@ function tourColumns(tour_embed) {
     floorPlanUrl: d.floor_plan_url,
     tourUrl: tour.tour_url,
     tourProvider: tour.tour_provider,
-    status: d.status || 'active',
+    // Only an admin's own listing goes live at once. Everyone else's starts
+    // under verification, whatever status the request asked for.
+    status: req.user.role === 'admin' ? (d.status || 'active') : 'pending',
   });
+
+  if (property.status === 'pending') {
+    const reviewers = await reviewersFor(req.user);
+    await Notification.insertMany(reviewers.map((r) => ({
+      user: r._id, kind: 'system',
+      title: `New property to verify: ${property.title}`,
+      body: `Posted by ${req.user.name}.`,
+      link: '/dashboard/admin/properties?status=pending',
+    })));
+  }
 
   if (images.length) {
     await PropertyImage.insertMany(images.map((url, i) => ({ property: property._id, url, sortOrder: i })));
@@ -412,11 +438,15 @@ function tourColumns(tour_embed) {
 
 router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = req.params.id;
-  const existing = await Property.findById(id).select('user price').lean();
+  const existing = await Property.findById(id).select('user price status').lean();
   if (!existing) throw new HttpError(404, 'Property not found');
   if (existing.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
     throw new HttpError(403, 'You can only edit your own listings');
   }
+  const isAdmin = req.user.role === 'admin';
+  // Until a reviewer approves it, the lister cannot move a listing to any
+  // live status themselves — only the review can.
+  const awaitingReview = !isAdmin && UNLISTED.includes(existing.status);
 
   const d = z.object({
     title: z.string().min(8).max(200).optional(),
@@ -476,10 +506,14 @@ router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
       if (tour) { update.tourUrl = tour.tour_url; update.tourProvider = tour.tour_provider; }
       continue;
     }
+    if (k === 'status' && awaitingReview) continue;
     const mongoKey = map[k];
     if (mongoKey) update[mongoKey] = nn(v);
   }
   if (d.amenities) update.amenities = d.amenities;
+  // Editing a rejected listing sends it back for another review.
+  const resubmitted = !isAdmin && existing.status === 'rejected' && (Object.keys(update).length > 0 || !!d.images);
+  if (resubmitted) Object.assign(update, { status: 'pending', reviewedBy: null, reviewedAt: null, reviewNote: null });
 
   if (Object.keys(update).length) {
     update.aiSummary = null;
@@ -498,6 +532,16 @@ router.put('/:id', requireAuth, asyncHandler(async (req, res) => {
     if (!d.cover_image && d.images[0]) {
       await Property.findByIdAndUpdate(id, { $set: { coverImage: d.images[0] } });
     }
+  }
+
+  if (resubmitted) {
+    const reviewers = await reviewersFor(req.user);
+    await Notification.insertMany(reviewers.map((r) => ({
+      user: r._id, kind: 'system',
+      title: `Property resubmitted for verification`,
+      body: `Updated by ${req.user.name}.`,
+      link: '/dashboard/admin/properties?status=pending',
+    })));
   }
 
   const row = await Property.findById(id)
@@ -558,7 +602,7 @@ router.get('/:id/summary', botLimiter, asyncHandler(async (req, res) => {
   const property = await Property.findById(req.params.id)
     .populate({ path: 'user', select: 'name role companyName reraId experienceYears isVerified' })
     .lean();
-  if (!property) throw new HttpError(404, 'Property not found');
+  if (!property || UNLISTED.includes(property.status)) throw new HttpError(404, 'Property not found');
   const imageCount = await PropertyImage.countDocuments({ property: property._id });
 
   const enriched = { ...property, image_count: imageCount };
@@ -596,7 +640,7 @@ router.post('/:id/ask', botLimiter, asyncHandler(async (req, res) => {
   const property = await Property.findById(req.params.id)
     .populate({ path: 'user', select: 'name role companyName reraId experienceYears isVerified' })
     .lean();
-  if (!property) throw new HttpError(404, 'Property not found');
+  if (!property || UNLISTED.includes(property.status)) throw new HttpError(404, 'Property not found');
   const imageCount = await PropertyImage.countDocuments({ property: property._id });
   const enriched = { ...shapeDoc(property), image_count: imageCount };
 

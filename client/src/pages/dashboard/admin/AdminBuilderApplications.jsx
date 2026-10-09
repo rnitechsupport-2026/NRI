@@ -4,11 +4,13 @@ import api from '../../../api/client.js';
 import { Empty, PageLoader } from '../../../components/ui.jsx';
 import { timeAgo, titleCase } from '../../../utils/format.js';
 import { Building, ArrowRight } from '../../../components/Icons.jsx';
+import { useStaffBase } from '../../../staff/staffBase.js';
 
 const STATUSES = ['all', 'draft', 'submitted', 'under_review', 'verified', 'active', 'rejected', 'resubmission_required'];
 const TRACK_CLS = { not_submitted: 'badge-outline', submitted: 'badge-blue', under_review: 'badge-amber', verified: 'badge-green', rejected: 'badge-red', expired: 'badge-red' };
 
 export default function AdminBuilderApplications() {
+  const base = useStaffBase();
   const [status, setStatus] = useState('submitted');
   const [rows, setRows] = useState(null);
 
@@ -53,7 +55,7 @@ export default function AdminBuilderApplications() {
                   <td><span className="badge badge-navy" style={{ background: '#fff', color: 'var(--navy-800)' }}>{titleCase(b.lifecycleStatus)}</span></td>
                   <td className="muted small nowrap">{b.submittedAt ? timeAgo(b.submittedAt) : '—'}</td>
                   <td>
-                    <Link to={`/dashboard/admin/builders/${b.userId}`} className="btn btn-xs btn-primary">
+                    <Link to={`${base}/builders/${b.userId}`} className="btn btn-xs btn-primary">
                       Review <ArrowRight style={{ width: 12, height: 12 }} />
                     </Link>
                   </td>

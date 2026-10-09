@@ -1,4 +1,4 @@
-// Three presets — each is just an ordered list of sections + a theme + a
+// A handful of presets — each is just an ordered list of sections + a theme + a
 // navbar, all consumed by the same MicrositeRenderer/registry as the
 // drag-and-drop builder. Picking a template never invents property facts;
 // it only chooses layout, order, and color/typography defaults.
@@ -6,6 +6,47 @@
 function section(sectionType, overrides = {}) {
   return { sectionType, isVisible: true, sectionData: {}, settings: {}, ...overrides };
 }
+
+// The standard property microsite: navbar, then exactly these sections in
+// this order. The other presets below keep the same relative order for the
+// sections they share with it and add their own extras around them.
+export const PROPERTY_SHOWCASE = {
+  id: 'property-showcase',
+  label: 'Property Showcase',
+  description: 'The standard property page — photo hero, about, image mapping, amenities, gallery and contact.',
+  theme: {
+    primaryColor: '#0e2a4e',
+    secondaryColor: '#e4a11b',
+    backgroundColor: '#ffffff',
+    textColor: '#111827',
+    buttonStyle: 'solid',
+    borderRadius: 'md',
+    fontStyle: 'modern',
+    sectionSpacing: 'normal',
+  },
+  sections: [
+    section('hero', { settings: { height: 'tall', overlay: 0.5 } }),
+    section('overview', { sectionData: { heading: 'About' }, settings: { tone: 'light' } }),
+    section('amenities', { settings: { tone: 'dark' } }),
+    section('imageMap', { settings: { tone: 'light' } }),
+    section('gallery', { settings: { tone: 'light', columns: 3 } }),
+    section('enquiryForm', { sectionData: { heading: 'Contact' }, settings: { tone: 'light' } }),
+    section('footer'),
+  ],
+  navbar: {
+    showLogo: true,
+    background: '#ffffff',
+    sticky: true,
+    items: [
+      { key: 'ms-hero', label: 'Home', visible: true, order: 0 },
+      { key: 'ms-overview', label: 'About', visible: true, order: 1 },
+      { key: 'ms-amenities', label: 'Amenities', visible: true, order: 2 },
+      { key: 'ms-image-map', label: 'Explore', visible: true, order: 3 },
+      { key: 'ms-gallery', label: 'Gallery', visible: true, order: 4 },
+      { key: 'ms-enquiry', label: 'Contact', visible: true, order: 5 },
+    ],
+  },
+};
 
 export const PREMIUM_LUXURY = {
   id: 'premium-luxury',
@@ -25,8 +66,9 @@ export const PREMIUM_LUXURY = {
     section('hero', { settings: { height: 'tall', overlay: 0.55 } }),
     section('overview', { settings: { tone: 'light' } }),
     section('highlights', { sectionData: { heading: 'Premium Highlights' }, settings: { tone: 'light' } }),
-    section('gallery', { settings: { tone: 'light', columns: 3 } }),
     section('amenities', { settings: { tone: 'dark' } }),
+    section('imageMap', { settings: { tone: 'light' } }),
+    section('gallery', { settings: { tone: 'light', columns: 3 } }),
     section('floorPlan', { settings: { tone: 'light' } }),
     section('location', { settings: { tone: 'dark' } }),
     section('ownerInfo', { settings: { tone: 'light' } }),
@@ -34,7 +76,7 @@ export const PREMIUM_LUXURY = {
     section('footer'),
   ],
   navbar: {
-    showLogo: false,
+    showLogo: true,
     background: '#0b1b3f',
     sticky: true,
     items: [
@@ -68,6 +110,7 @@ export const MODERN_REAL_ESTATE = {
     section('overview', { sectionData: { heading: 'Quick Property Stats' }, settings: { tone: 'light' } }),
     section('highlights', { sectionData: { heading: 'Why This Property' }, settings: { tone: 'light' } }),
     section('amenities', { settings: { tone: 'light' } }),
+    section('imageMap', { settings: { tone: 'light' } }),
     section('gallery', { settings: { tone: 'light', columns: 4 } }),
     section('floorPlan', { settings: { tone: 'light' } }),
     section('location', { settings: { tone: 'light' } }),
@@ -75,7 +118,7 @@ export const MODERN_REAL_ESTATE = {
     section('footer'),
   ],
   navbar: {
-    showLogo: false,
+    showLogo: true,
     background: '#ffffff',
     sticky: true,
     items: [
@@ -109,6 +152,7 @@ export const LEAD_GENERATION = {
     section('overview', { settings: { tone: 'light' } }),
     section('highlights', { sectionData: { heading: 'Why Choose This Property?' }, settings: { tone: 'light' } }),
     section('amenities', { settings: { tone: 'light' } }),
+    section('imageMap', { settings: { tone: 'light' } }),
     section('gallery', { settings: { tone: 'light', columns: 3 } }),
     section('floorPlan', { settings: { tone: 'light' } }),
     section('location', { settings: { tone: 'light' } }),
@@ -118,7 +162,7 @@ export const LEAD_GENERATION = {
     section('footer'),
   ],
   navbar: {
-    showLogo: false,
+    showLogo: true,
     background: '#ffffff',
     sticky: true,
     items: [
@@ -152,6 +196,7 @@ export const EDITORIAL = {
     section('overview', { settings: { tone: 'light' } }),
     section('highlights', { sectionData: { heading: 'Why This Property' }, settings: { tone: 'light' } }),
     section('amenities', { settings: { tone: 'dark' } }),
+    section('imageMap', { settings: { tone: 'light' } }),
     section('masonryGallery', { settings: { tone: 'light' } }),
     section('floorPlan', { settings: { tone: 'light' } }),
     section('location', { settings: { tone: 'dark' } }),
@@ -161,7 +206,7 @@ export const EDITORIAL = {
     section('footer'),
   ],
   navbar: {
-    showLogo: false,
+    showLogo: true,
     background: '#faf7f2',
     sticky: true,
     items: [
@@ -175,6 +220,6 @@ export const EDITORIAL = {
   },
 };
 
-export const TEMPLATES = [PREMIUM_LUXURY, MODERN_REAL_ESTATE, LEAD_GENERATION, EDITORIAL];
+export const TEMPLATES = [PROPERTY_SHOWCASE, PREMIUM_LUXURY, MODERN_REAL_ESTATE, LEAD_GENERATION, EDITORIAL];
 
 export const TEMPLATE_BY_ID = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));

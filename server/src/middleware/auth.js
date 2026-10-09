@@ -37,8 +37,9 @@ async function optionalAuth(req, _res, next) {
   if (!token) return next();
   try {
     const payload = jwt.verify(token, SECRET);
-    const user = await User.findById(payload.id).select('name email role');
-    if (user) req.user = user.toObject();
+    // managedPortals / assignedUsers: staffScope needs them to decide what an employee may preview.
+    const user = await User.findById(payload.id).select('name email role status managedPortals assignedUsers');
+    if (user && user.status === 'active') req.user = user.toObject();
   } catch { /* ignore bad token */ }
   next();
 }

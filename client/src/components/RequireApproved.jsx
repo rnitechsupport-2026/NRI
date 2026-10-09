@@ -22,7 +22,7 @@ export default function RequireApproved({ children }) {
       </div>
       <h3>Your account is under verification</h3>
       <p className="muted small mt-2">
-        An admin needs to review your {ROLE_LABEL[user.role]} application before you can post listings.
+        Our team needs to review and approve your {ROLE_LABEL[user.role]} account before you can post listings.
         Everything else in your dashboard works normally in the meantime.
       </p>
       {user.role === 'agent' ? (

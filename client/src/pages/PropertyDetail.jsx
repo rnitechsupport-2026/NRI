@@ -75,13 +75,30 @@ export default function PropertyDetail() {
   // Fired in parallel with the property fetch above, not chained after it —
   // an owner can publish a microsite for their listing; when they have, that
   // fully replaces this page's own markup (see the early return below).
+  //
+  // Only a 404 means "no published microsite" — a timeout or 5xx (e.g. the
+  // API waking from idle) says nothing either way, so that's retried rather
+  // than treated as a no, which used to drop a listing that does have a
+  // microsite back onto the plain page for that one visit.
   useEffect(() => {
     let live = true;
+    let timer;
     setMicrosite(undefined);
-    api.get(`/microsites/for-property/${idOrSlug}`)
-      .then((r) => { if (live) setMicrosite(r.data.data); })
-      .catch(() => { if (live) setMicrosite(null); });
-    return () => { live = false; };
+    const load = (attempt) => {
+      api.get(`/microsites/for-property/${idOrSlug}`)
+        .then((r) => {
+          if (!live) return;
+          const d = r.data?.data;
+          setMicrosite(d?.property && d?.microsite ? d : null);
+        })
+        .catch((e) => {
+          if (!live) return;
+          if (e.response?.status === 404 || attempt >= 2) setMicrosite(null);
+          else timer = setTimeout(() => load(attempt + 1), 1200 * (attempt + 1));
+        });
+    };
+    load(0);
+    return () => { live = false; clearTimeout(timer); };
   }, [idOrSlug]);
 
   // The microsite brings its own navbar/footer — hide the site chrome (which

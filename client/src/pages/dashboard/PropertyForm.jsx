@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import api, { errMsg, errFields } from '../../api/client.js';
 import { useToast } from '../../context/ToastContext.jsx';
 import ImagePicker from '../../components/ImagePicker.jsx';
+import { mapService } from '../../plotmap/services.js';
 import TourEmbed from '../../components/TourEmbed.jsx';
 import { Field, Notice, PageLoader } from '../../components/ui.jsx';
 import { AMENITY_LIST, CITIES, TYPE_LABEL, PURPOSE_LABEL, money, titleCase } from '../../utils/format.js';
@@ -89,6 +90,11 @@ export default function PropertyForm() {
   const [error, setError] = useState('');
   const [errors, setErrors] = useState({});
   const [providers, setProviders] = useState([]);
+  // The listing's ONE interactive-map image (land layout, or the single
+  // building/floor layout of an apartment). Saved to the listing's plot map,
+  // not to the listing itself; `savedMapImage` is what the server has.
+  const [mapImage, setMapImage] = useState('');
+  const [savedMapImage, setSavedMapImage] = useState('');
 
   useEffect(() => {
     api.get('/properties/meta/tour-providers')
@@ -111,6 +117,9 @@ export default function PropertyForm() {
       })
       .catch((e) => setError(errMsg(e, 'Could not load this listing')))
       .finally(() => setLoading(false));
+    mapService.get(id)
+      .then((d) => { const url = d.project.layoutImage?.url || ''; setMapImage(url); setSavedMapImage(url); })
+      .catch(() => {});
   }, [editing, id]);
 
   const set = (k) => (e) => {
@@ -127,6 +136,7 @@ export default function PropertyForm() {
 
   const isLand = LAND_TYPES.includes(f.property_type);
   const isRental = ['rent', 'pg', 'lease'].includes(f.purpose);
+  const isApartmentMap = f.property_type === 'apartment';
 
   async function submit(e) {
     e.preventDefault();
@@ -142,12 +152,34 @@ export default function PropertyForm() {
     payload.tour_embed = f.tour_embed || '';
 
     try {
+      let propertyId = id;
       if (editing) {
         await api.put(`/properties/${id}`, payload);
         toast.success('Listing updated');
       } else {
-        await api.post('/properties', payload);
-        toast.success('Property posted! It is now live.');
+        const { data } = await api.post('/properties', payload);
+        propertyId = data.data.id;
+        toast.success(data.data.status === 'pending'
+          ? 'Property submitted — it is Under Verification and goes live once our team approves it.'
+          : 'Property posted! It is now live.');
+      }
+
+      // The map image is saved after the listing so a problem with it can
+      // never lose the listing itself.
+      if (mapImage !== savedMapImage) {
+        try {
+          await mapService.save(propertyId, { layoutImage: mapImage ? { url: mapImage } : null });
+        } catch (err) {
+          toast.error(`The listing was saved, but its map image was not: ${err.message}`);
+          nav('/dashboard/properties');
+          return;
+        }
+        // A new image has nothing mapped on it yet — go straight to mapping.
+        if (mapImage) {
+          toast.info(isApartmentMap ? 'Now add the floors and map the flats on your image.' : 'Now map the plots on your layout image.');
+          nav(`/dashboard/property/${propertyId}/mapping`);
+          return;
+        }
       }
       nav('/dashboard/properties');
     } catch (err) {
@@ -417,6 +449,31 @@ export default function PropertyForm() {
             </Field>
           </div>
 
+          <hr style={{ border: 'none', borderTop: '1px solid var(--line-2)', margin: '26px 0' }} />
+
+          <div className="row mb-2" style={{ gap: 10 }}>
+            <Grid style={{ width: 22, height: 22, color: 'var(--gold-600)' }} />
+            <h4>{isApartmentMap ? 'Interactive flat map' : 'Interactive plot map'}</h4>
+            <span className="badge badge-outline">Optional</span>
+          </div>
+
+          <Field
+            label={isApartmentMap ? 'Building / floor layout image' : 'Layout image'}
+            hint={isApartmentMap
+              ? 'Upload ONE image for the complete building or floor layout — do not add an image per floor. While mapping you pick a floor and mark its flats on this same image.'
+              : 'Upload ONE image of the whole layout. Every plot is marked on it, with its status and details.'}
+          >
+            <ImagePicker value={mapImage ? [mapImage] : []} onChange={(list) => setMapImage(list[list.length - 1] || '')} max={1} />
+          </Field>
+          {mapImage && (
+            <p className="tiny muted mt-1">
+              To use a different image, remove this one first.{' '}
+              {editing && mapImage === savedMapImage
+                ? <Link to={`/dashboard/property/${id}/mapping`} className="strong">Open the mapping editor →</Link>
+                : 'After you save, the mapping editor opens so you can mark the ' + (isApartmentMap ? 'flats floor by floor.' : 'plots.')}
+            </p>
+          )}
+
           <div className="row-between mt-3">
             <button type="button" className="btn btn-outline" onClick={() => setStep(1)}><ChevronLeft /> Back</button>
             <button type="button" className="btn btn-dark" onClick={() => setStep(3)}>Continue <ArrowRight /></button>
@@ -471,7 +528,7 @@ export default function PropertyForm() {
 
             <Field label="Listing status">
               <select className="select" value={f.status} onChange={set('status')}>
-                <option value="active">Active — visible to buyers</option>
+                <option value="active">Active — visible to buyers once approved</option>
                 <option value="inactive">Paused — hidden</option>
                 <option value="sold">Sold</option>
                 <option value="rented">Rented out</option>

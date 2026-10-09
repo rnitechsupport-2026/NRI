@@ -1,56 +1,57 @@
-import { toneStyle, headingFontClass } from '../theme.js';
-import FadeIn from '../FadeIn.jsx';
+import Section from '../Section.jsx';
+import { Reveal, Stagger, StaggerItem } from '../motion.jsx';
 
-export function TextBlock({ data = {}, settings = {}, theme }) {
+export function TextBlock({ anchorId, data = {}, settings = {} }) {
   if (!data.text) return null;
-  const tone = settings.tone || 'light';
   return (
-    <section className="px-6" style={{ ...toneStyle(theme, tone), paddingTop: 'var(--ms-pad-y)', paddingBottom: 'var(--ms-pad-y)' }}>
-      <FadeIn className="mx-auto max-w-3xl">
-        {data.heading && <h2 className={`${headingFontClass(theme)} mb-4 text-2xl font-semibold`}>{data.heading}</h2>}
-        <p className="whitespace-pre-line text-[15px] leading-relaxed opacity-90">{data.text}</p>
-      </FadeIn>
-    </section>
+    <Section id={anchorId} tone={settings.tone || 'light'} width="max-w-3xl">
+      <Stagger className="flex flex-col gap-5">
+        {data.heading && <StaggerItem as="h2" className="ms-h2" style={{ fontSize: 'clamp(1.7rem, 1.2rem + 2vw, 2.6rem)' }}>{data.heading}</StaggerItem>}
+        <StaggerItem as="p" className="ms-lead whitespace-pre-line" style={{ maxWidth: 'none' }}>{data.text}</StaggerItem>
+      </Stagger>
+    </Section>
   );
 }
 
-export function ImageBlock({ data = {}, settings = {}, theme }) {
+export function ImageBlock({ anchorId, data = {}, settings = {} }) {
   if (!data.image) return null;
-  const tone = settings.tone || 'light';
   return (
-    <section className="px-6" style={{ ...toneStyle(theme, tone), paddingTop: 'var(--ms-pad-y)', paddingBottom: 'var(--ms-pad-y)' }}>
-      <FadeIn className="mx-auto max-w-4xl overflow-hidden shadow-sm" style={{ borderRadius: 'var(--ms-radius)' }}>
-        <img src={data.image} alt={data.alt || ''} className="w-full object-cover" />
-      </FadeIn>
-    </section>
+    <Section id={anchorId} tone={settings.tone || 'light'} width="max-w-5xl">
+      <Reveal>
+        <div className="ms-frame ms-zoomable">
+          <div><img src={data.image} alt={data.alt || ''} loading="lazy" className="w-full object-cover" /></div>
+        </div>
+      </Reveal>
+    </Section>
   );
 }
 
-export function ImageTextBlock({ data = {}, settings = {}, theme }) {
+export function ImageTextBlock({ anchorId, data = {}, settings = {} }) {
   if (!data.image && !data.text) return null;
-  const tone = settings.tone || 'light';
   const reverse = settings.imagePosition === 'right';
   return (
-    <section className="px-6" style={{ ...toneStyle(theme, tone), paddingTop: 'var(--ms-pad-y)', paddingBottom: 'var(--ms-pad-y)' }}>
-      <FadeIn className={`mx-auto grid max-w-5xl grid-cols-1 items-center gap-8 md:grid-cols-2 ${reverse ? 'md:[&>*:first-child]:order-2' : ''}`}>
+    <Section id={anchorId} tone={settings.tone || 'light'}>
+      <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2 lg:gap-16">
         {data.image && (
-          <div className="overflow-hidden shadow-sm" style={{ borderRadius: 'var(--ms-radius)' }}>
-            <img src={data.image} alt={data.alt || ''} className="w-full object-cover" />
-          </div>
+          <Reveal className={reverse ? 'md:order-2' : ''}>
+            <div className="ms-frame ms-zoomable">
+              <div><img src={data.image} alt={data.alt || ''} loading="lazy" className="w-full object-cover" /></div>
+            </div>
+          </Reveal>
         )}
-        <div>
-          {data.heading && <h3 className={`${headingFontClass(theme)} mb-3 text-2xl font-semibold`}>{data.heading}</h3>}
-          {data.text && <p className="whitespace-pre-line text-[15px] leading-relaxed opacity-90">{data.text}</p>}
-        </div>
-      </FadeIn>
-    </section>
+        <Stagger className="flex flex-col gap-5">
+          {data.heading && <StaggerItem as="h2" className="ms-h2" style={{ fontSize: 'clamp(1.7rem, 1.2rem + 2vw, 2.6rem)' }}>{data.heading}</StaggerItem>}
+          {data.text && <StaggerItem as="p" className="ms-lead whitespace-pre-line">{data.text}</StaggerItem>}
+        </Stagger>
+      </div>
+    </Section>
   );
 }
 
 export function Divider() {
-  return <div className="mx-auto max-w-5xl px-6"><hr style={{ border: 'none', borderTop: '1px solid rgba(127,127,127,0.2)' }} /></div>;
+  return <div className="mx-auto max-w-6xl px-6"><hr style={{ border: 0, height: 1, background: 'linear-gradient(90deg, transparent, var(--ms-line), transparent)' }} /></div>;
 }
 
 export function Spacer({ settings = {} }) {
-  return <div style={{ height: settings.height || 40 }} />;
+  return <div aria-hidden="true" style={{ height: settings.height || 40 }} />;
 }

@@ -19,9 +19,9 @@ export default function DashSidebar({ user, mobileOpen, onClose }) {
 
   const isAdmin = user.role === 'admin';
   const isEmployee = user.role === 'employee';
-  const portals = isAdmin ? ['owner', 'agent', 'builder', 'service'] : (user.managed_portals || []);
+  const portals = isAdmin ? ['owner', 'agent', 'builder', 'service'] : (user.scope_portals || user.managed_portals || []);
 
-  const menuLinks = [
+  const menuLinks = isEmployee ? [] : [
     { to: '/dashboard', label: 'Overview', icon: Dashboard, end: true },
     ...(canProperty ? [
       { to: '/dashboard/properties', label: 'My Properties', icon: Home },
@@ -46,15 +46,15 @@ export default function DashSidebar({ user, mobileOpen, onClose }) {
     ...(user.role === 'agent' ? [{ to: '/dashboard/agent/verification', label: 'Verification', icon: Shield }] : []),
     ...(user.role === 'builder' ? [{ to: '/dashboard/builder/verification', label: 'Verification', icon: Shield }] : []),
     ...(user.role === 'service' ? [{ to: '/dashboard/service/verification', label: 'Verification', icon: Shield }] : []),
-    { to: `/profile/${user.id}`, label: 'Public profile', icon: User },
+    ...(isEmployee ? [] : [{ to: `/profile/${user.id}`, label: 'Public profile', icon: User }]),
   ];
 
   const adminLinks = (isAdmin || isEmployee) ? [
-    { to: '/dashboard/admin', label: 'Admin Overview', icon: Chart, end: true },
+    { to: '/dashboard/admin', label: isAdmin ? 'Admin Overview' : 'Overview', icon: Chart, end: true },
     ...(isAdmin ? [{ to: '/dashboard/admin/employees', label: 'Employees', icon: Users }] : []),
-    { to: '/dashboard/admin/users', label: 'Manage Users', icon: Users },
-    ...(portals.some((p) => p === 'owner' || p === 'agent')
-      ? [{ to: '/dashboard/admin/properties', label: 'Manage Properties', icon: Home }] : []),
+    { to: '/dashboard/admin/users', label: isAdmin ? 'Manage Users' : 'Assigned Users', icon: Users },
+    ...(portals.some((p) => p === 'owner' || p === 'agent' || p === 'builder')
+      ? [{ to: '/dashboard/admin/properties', label: isAdmin ? 'Manage Properties' : 'Property Verification', icon: Home }] : []),
     ...(portals.includes('agent')
       ? [{ to: '/dashboard/admin/agents', label: 'Agent Applications', icon: Shield }] : []),
     ...(portals.includes('builder')
@@ -65,10 +65,10 @@ export default function DashSidebar({ user, mobileOpen, onClose }) {
       ? [{ to: '/dashboard/admin/service-providers', label: 'Service Applications', icon: Shield }] : []),
     ...(portals.includes('service')
       ? [{ to: '/dashboard/admin/services', label: 'Manage Services', icon: Wrench }] : []),
-    { to: '/dashboard/admin/leads', label: 'All Enquiries', icon: Inbox },
+    { to: '/dashboard/admin/leads', label: isAdmin ? 'All Enquiries' : 'User Leads', icon: Inbox },
     ...(portals.some((p) => p === 'owner' || p === 'agent' || p === 'builder')
       ? [{ to: '/dashboard/admin/microsites', label: 'Microsites', icon: Layers }] : []),
-    { to: '/dashboard/admin/audit-log', label: 'Audit Log', icon: Document },
+    { to: '/dashboard/admin/audit-log', label: isAdmin ? 'Audit Log' : 'Approval History', icon: Document },
   ] : [];
 
   const renderLink = (l) => {
@@ -99,7 +99,7 @@ export default function DashSidebar({ user, mobileOpen, onClose }) {
         </div>
 
         <nav className="dash-nav app-nav">
-          <span className="app-nav-label">Menu</span>
+          {menuLinks.length > 0 && <span className="app-nav-label">Menu</span>}
           {menuLinks.map(renderLink)}
 
           <span className="app-nav-label">Account</span>
@@ -108,7 +108,7 @@ export default function DashSidebar({ user, mobileOpen, onClose }) {
           {adminLinks.length > 0 && (
             <>
               <button type="button" className="app-nav-label app-nav-toggle" onClick={() => setAdminOpen((o) => !o)}>
-                Admin
+                {isAdmin ? 'Admin' : 'Employee Portal'}
                 <ChevronDown style={{ width: 13, height: 13, transform: adminOpen ? 'rotate(180deg)' : 'none' }} />
               </button>
               {adminOpen && adminLinks.map(renderLink)}

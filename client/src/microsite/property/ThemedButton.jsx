@@ -1,24 +1,28 @@
 import { motion } from 'framer-motion';
-import { primaryButtonStyle, secondaryButtonStyle } from './theme.js';
 
-export default function ThemedButton({ theme, variant = 'primary', href, onClick, children, icon: Icon, className = '' }) {
-  const style = variant === 'secondary' ? secondaryButtonStyle(theme) : primaryButtonStyle(theme);
-  const shadow = variant === 'secondary' ? {} : { boxShadow: `0 8px 24px -10px ${theme.primaryColor}66` };
+/**
+ * The microsite's one button. Colours, radius and the solid / outline / pill
+ * style all come from the theme through CSS (premium.css `.ms-btn*`), so it
+ * also adapts on its own when it sits on the brand colour or over a photo.
+ * variant: 'primary' | 'secondary' (outline) | 'ghost' (glass, for photos).
+ */
+export default function ThemedButton({ variant = 'primary', size, href, onClick, children, icon: Icon, className = '', ...rest }) {
   const Tag = href ? motion.a : motion.button;
-  const extra = href && href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {};
+  const external = href && href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {};
   return (
     <Tag
       href={href}
+      type={href ? undefined : 'button'}
       onClick={onClick}
-      style={{ ...style, ...shadow }}
-      whileHover={{ scale: 1.035, y: -1 }}
+      whileHover={{ y: -2 }}
       whileTap={{ scale: 0.97 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-      className={`inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold ${className}`}
-      {...extra}
+      transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+      className={`ms-btn ms-btn-${variant} ${size === 'sm' ? 'ms-btn-sm' : ''} ${className}`}
+      {...external}
+      {...rest}
     >
       {children}
-      {Icon && <Icon style={{ width: 16, height: 16 }} />}
+      {Icon && <Icon />}
     </Tag>
   );
 }

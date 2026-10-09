@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import api, { errMsg } from '../../../api/client.js';
 import { useToast } from '../../../context/ToastContext.jsx';
@@ -7,24 +7,48 @@ import { Empty, Modal, PageLoader } from '../../../components/ui.jsx';
 import { money, timeAgo, titleCase, PORTAL_LABEL } from '../../../utils/format.js';
 import { Home, Eye, Trash, Shield, Star } from '../../../components/Icons.jsx';
 
-const STATUSES = ['pending', 'active', 'sold', 'rented', 'inactive'];
+import { propertyReview } from './verificationLabels.js';
+import { useStaffBase } from '../../../staff/staffBase.js';
 
-export default function AdminProperties() {
+// After approval a listing can be moved between these; "Under Verification"
+// and "Rejected" are only ever set by the review itself.
+const LIVE_STATUSES = ['active', 'inactive', 'sold', 'rented'];
+const FILTERS = [['pending', 'Under Verification'], ['active', 'Approved · Live'], ['rejected', 'Rejected'], ['', 'All']];
+
+/** `queue`: open as the verification queue — only listings Under Verification. */
+export default function AdminProperties({ queue = false }) {
+  const base = useStaffBase();
   const { isAdmin, managedPortals } = useAuth();
   const toast = useToast();
   const portals = (isAdmin ? ['owner', 'agent', 'builder', 'service'] : managedPortals)
-    .filter((p) => p === 'owner' || p === 'agent');
+    .filter((p) => p === 'owner' || p === 'agent' || p === 'builder');
 
+  const [params] = useSearchParams();
   const [portal, setPortal] = useState(portals[0] || '');
+  const [status, setStatusFilter] = useState(queue ? 'pending' : (params.get('status') || ''));
   const [rows, setRows] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = () => {
     if (!portal) { setRows([]); return; }
-    api.get('/admin/properties', { params: { portal } }).then((r) => setRows(r.data.data)).catch(() => setRows([]));
+    api.get('/admin/properties', { params: { portal, status: status || undefined, limit: 60 } }).then((r) => setRows(r.data.data)).catch(() => setRows([]));
   };
-  useEffect(() => { setRows(null); load(); }, [portal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setRows(null); load(); }, [portal, status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function review(row, decision) {
+    // a rejection always carries the reason the lister will see
+    let reason;
+    if (decision === 'rejected') {
+      reason = window.prompt(`Why is "${row.title}" being rejected? The lister sees this reason.`);
+      if (!reason || !reason.trim()) return;
+    }
+    try {
+      await api.put(`/admin/properties/${row.id}/review`, { decision, reason: reason?.trim() });
+      toast.success(decision === 'approved' ? 'Property approved — it is live now' : 'Property rejected');
+      load();
+    } catch (err) { toast.error(errMsg(err)); }
+  }
 
   async function setStatus(row, status) {
     try {
@@ -63,15 +87,21 @@ export default function AdminProperties() {
   }
 
   if (!portals.length) {
-    return <Empty icon={Shield} title="No portal assigned yet">You're not in charge of the Owner or Agent portal.</Empty>;
+    return <Empty icon={Shield} title="No users assigned yet">You have no Owner, Agent or Builder users assigned.</Empty>;
   }
 
   return (
     <div className="stack" style={{ gap: 20 }}>
       <div>
-        <h2>Manage properties</h2>
-        <p className="muted small mt-1">Moderate listings — verify, feature, pause or remove.</p>
+        <h2>{queue ? 'Properties under verification' : isAdmin ? 'Manage properties' : 'Property verification'}</h2>
+        <p className="muted small mt-1">A new listing stays Under Verification and off the public site until it is approved here.</p>
       </div>
+
+      {!queue && <div className="pills">
+        {FILTERS.map(([key, label]) => (
+          <button key={key || 'all'} className={`pill ${status === key ? 'on' : ''}`} onClick={() => setStatusFilter(key)}>{label}</button>
+        ))}
+      </div>}
 
       {portals.length > 1 && (
         <div className="pills">
@@ -84,7 +114,7 @@ export default function AdminProperties() {
       )}
 
       {rows === null ? <PageLoader label="Loading listings…" /> : rows.length === 0 ? (
-        <Empty icon={Home} title="No listings in this portal yet" />
+        <Empty icon={Home} title={status === 'pending' ? 'Nothing waiting for verification' : 'No listings match this filter'} />
       ) : (
         <div className="card table-wrap">
           <table className="tbl">
@@ -103,13 +133,21 @@ export default function AdminProperties() {
                       </div>
                     </div>
                   </td>
-                  <td className="small">{p.ownerName}<div className="tiny muted">{titleCase(p.ownerRole)}</div></td>
+                  <td className="small">
+                    <Link to={`${base}/users/${p.ownerId}`} style={{ textDecoration: 'underline' }}>{p.ownerName}</Link>
+                    <div className="tiny muted">{titleCase(p.ownerRole)}</div>
+                  </td>
                   <td className="strong nowrap">{money(p.price)}</td>
                   <td>
-                    <select className="select btn-xs" style={{ height: 32, fontSize: '.78rem', width: 118 }}
-                            value={p.status} onChange={(e) => setStatus(p, e.target.value)}>
-                      {STATUSES.map((s) => <option key={s} value={s}>{titleCase(s)}</option>)}
-                    </select>
+                    <span className={`badge ${propertyReview(p.status).cls}`}>{propertyReview(p.status).label}</span>
+                    {LIVE_STATUSES.includes(p.status) && (
+                      <select className="select btn-xs mt-1" style={{ height: 30, fontSize: '.76rem', width: 118, display: 'block' }}
+                              value={p.status} onChange={(e) => setStatus(p, e.target.value)} aria-label="Listing status">
+                        {LIVE_STATUSES.map((s) => <option key={s} value={s}>{s === 'inactive' ? 'Paused' : titleCase(s)}</option>)}
+                      </select>
+                    )}
+                    {p.reviewedByName && <div className="tiny muted mt-1">by {p.reviewedByName} · {timeAgo(p.reviewedAt)}</div>}
+                    {p.status === 'rejected' && p.reviewNote && <div className="tiny mt-1" style={{ color: '#b42318' }}>{p.reviewNote}</div>}
                   </td>
                   <td>
                     <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}>
@@ -121,6 +159,12 @@ export default function AdminProperties() {
                   <td>
                     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                       <Link to={`/property/${p.slug || p.id}`} className="btn btn-xs btn-outline" title="View"><Eye /></Link>
+                      {(p.status === 'pending' || p.status === 'rejected') && (
+                        <button className="btn btn-xs btn-primary" onClick={() => review(p, 'approved')}>Approve</button>
+                      )}
+                      {p.status !== 'rejected' && (
+                        <button className="btn btn-xs btn-danger" onClick={() => review(p, 'rejected')}>Reject</button>
+                      )}
                       <button className="btn btn-xs btn-outline" onClick={() => toggleVerify(p)}>
                         {p.isVerified ? 'Unverify' : 'Verify'}
                       </button>

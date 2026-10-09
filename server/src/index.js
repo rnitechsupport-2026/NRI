@@ -19,9 +19,12 @@ const PORT = process.env.PORT || 5001;
 // on the https page.
 app.set('trust proxy', 1);
 
-const corsOrigins = [process.env.CLIENT_URL, 'https://nri-nine.vercel.app', 'http://localhost:5173'].filter(Boolean);
+const stripSlash = (u) => (u || '').trim().replace(/\/+$/, '');
+const corsOrigins = [process.env.CLIENT_URL, 'https://nri-nine.vercel.app', 'http://localhost:5173']
+  .filter(Boolean).map(stripSlash);
 app.use(cors({ origin: (origin, cb) => {
-  if (!origin || corsOrigins.includes(origin)) return cb(null, true);
+  if (!origin || corsOrigins.includes(stripSlash(origin))) return cb(null, true);
+  console.warn(`→ CORS blocked: ${origin}`);
   return cb(new Error('Not allowed by CORS'));
 }, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
@@ -45,6 +48,7 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/properties', require('./routes/property.routes'));
 app.use('/api/microsites', require('./routes/microsite.routes'));
+app.use('/api/plot-maps', require('./routes/plotmap.routes'));
 app.use('/api/projects', require('./routes/project.routes'));
 app.use('/api/services', require('./routes/service.routes'));
 app.use('/api/leads', require('./routes/lead.routes'));

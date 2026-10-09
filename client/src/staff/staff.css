@@ -1,0 +1,70 @@
+/* The Staff Portal's own look: a navy, back-office feel that is clearly not
+   the customer site. Everything is scoped to .staff-login / .staff-shell, so
+   the customer dashboard and the admin dashboard are untouched. */
+
+/* ------------------------------------------------------------ sign in */
+.staff-login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); background: var(--bg); }
+.staff-login-side {
+  display: flex; flex-direction: column; justify-content: space-between; gap: 40px;
+  padding: 44px 52px; color: #fff;
+  background:
+    radial-gradient(70% 55% at 100% 0%, rgba(255, 255, 255, .09), transparent 70%),
+    linear-gradient(160deg, var(--navy-900), var(--navy-800) 55%, var(--navy-700));
+}
+.staff-login-side img { background: #fff; border-radius: 10px; padding: 6px 10px; }
+.staff-login-tag {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: var(--r-full);
+  background: rgba(255, 255, 255, .12); font-size: .74rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+}
+.staff-login-tag svg { width: 14px; height: 14px; }
+.staff-login-side h1 { color: #fff; font-size: clamp(1.9rem, 3vw, 2.7rem); margin-top: 18px; }
+.staff-login-side p { color: rgba(255, 255, 255, .78); margin-top: 14px; max-width: 440px; }
+.staff-login-side ul { display: flex; flex-direction: column; gap: 14px; margin-top: 30px; }
+.staff-login-side li { display: flex; align-items: flex-start; gap: 12px; font-size: .92rem; color: rgba(255, 255, 255, .88); }
+.staff-login-side li svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; color: rgba(255, 255, 255, .7); }
+.staff-login-side small { color: rgba(255, 255, 255, .55); font-size: .78rem; }
+
+.staff-login-main { display: grid; place-items: center; padding: 40px 22px; }
+.staff-login-card { width: 100%; max-width: 430px; padding: 34px 32px; display: flex; flex-direction: column; gap: 16px; }
+.staff-login-card h2 { font-size: 1.6rem; margin: 0; }
+.staff-login-card .field { display: flex; flex-direction: column; gap: 6px; }
+.staff-login-card .field > span { font-size: .84rem; font-weight: 600; color: var(--ink-2); }
+.staff-login-card .input:focus { border-color: var(--navy-700); box-shadow: 0 0 0 4px rgba(22, 64, 111, .12); }
+.staff-login-eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 30px; height: 30px; color: var(--muted); }
+.staff-login-eye svg { width: 17px; height: 17px; position: static; }
+.staff-login-mobile-logo { display: none; }
+@media (max-width: 900px) {
+  .staff-login { grid-template-columns: 1fr; }
+  .staff-login-side { display: none; }
+  .staff-login-mobile-logo { display: block; }
+}
+
+/* -------------------------------------------------------------- portal */
+.staff-shell .app-sidebar { background: var(--navy-900); border-right: 0; }
+.staff-shell .app-sidebar-head { border-bottom-color: rgba(255, 255, 255, .1); }
+.staff-brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: .95rem; }
+.staff-brand img { background: #fff; border-radius: 7px; padding: 3px 6px; }
+.staff-shell .app-sidebar-close { color: #fff; }
+.staff-shell .app-nav-label { color: rgba(255, 255, 255, .45); }
+.staff-shell .dash-nav a { color: rgba(255, 255, 255, .82); }
+.staff-shell .dash-nav a svg { color: rgba(255, 255, 255, .6); }
+.staff-shell .dash-nav a:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.staff-shell .dash-nav a.active { background: #fff; color: var(--navy-900); box-shadow: none; }
+.staff-shell .dash-nav a.active svg { color: var(--navy-800); }
+.staff-scope { padding: 14px 18px 18px; border-top: 1px solid rgba(255, 255, 255, .1); color: rgba(255, 255, 255, .6); display: flex; flex-direction: column; gap: 7px; }
+.staff-scope .badge { background: rgba(255, 255, 255, .12); color: #fff; }
+.staff-shell .app-topbar-title { color: var(--navy-800); }
+
+/* six figures: three across, two on a tablet, one on a phone */
+.staff-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .staff-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .staff-kpis { grid-template-columns: 1fr; } }
+.staff-kpis .kpi { color: inherit; }
+.staff-kpis .kpi b { font-size: 1.9rem; line-height: 1.1; }
+.staff-kpi-urgent { border-color: #f3c98a; background: linear-gradient(180deg, var(--amber-bg), var(--surface) 70%); }
+.staff-queues { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
+.staff-list { display: flex; flex-direction: column; }
+.staff-list li + li { border-top: 1px solid var(--line-2); }
+.staff-list a { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 4px; color: inherit; border-radius: 8px; }
+.staff-list a:hover { background: var(--bg); }
+.staff-list b { font-size: .92rem; }

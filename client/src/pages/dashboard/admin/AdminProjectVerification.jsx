@@ -5,11 +5,13 @@ import { useToast } from '../../../context/ToastContext.jsx';
 import { PageLoader, Notice } from '../../../components/ui.jsx';
 import { timeAgo, titleCase } from '../../../utils/format.js';
 import { ChevronLeft, Document, Eye, Check, X, Clock, Alert } from '../../../components/Icons.jsx';
+import { useStaffBase } from '../../../staff/staffBase.js';
 
 const STATUS_CLS = { not_submitted: 'badge-outline', submitted: 'badge-blue', under_review: 'badge-amber', verified: 'badge-green', rejected: 'badge-red' };
 const DOC_LABEL = { rera_certificate: 'RERA registration certificate', jda_poa: 'JDA / POA', encumbrance_certificate: 'Encumbrance Certificate', approval_doc: 'Government approval', other: 'Document' };
 
 export default function AdminProjectVerification() {
+  const base = useStaffBase();
   const { id } = useParams();
   const toast = useToast();
   const [data, setData] = useState(null);
@@ -48,7 +50,7 @@ export default function AdminProjectVerification() {
 
   return (
     <div className="stack" style={{ gap: 20 }}>
-      <Link to="/dashboard/admin/projects" className="row" style={{ gap: 6, width: 'fit-content' }}>
+      <Link to={`${base}/projects`} className="row" style={{ gap: 6, width: 'fit-content' }}>
         <ChevronLeft style={{ width: 16, height: 16 }} /> <span className="small">Back to projects</span>
       </Link>
 

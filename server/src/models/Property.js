@@ -49,7 +49,12 @@ const propertySchema = new mongoose.Schema(
     aiSummarySource: { type: String, enum: ['ai', 'template'] },
     isFeatured: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
-    status: { type: String, enum: ['pending', 'active', 'sold', 'rented', 'inactive'], default: 'active' },
+    // 'pending' = under verification, 'rejected' = turned down by the reviewer;
+    // neither is public. 'active' and the rest exist only after approval.
+    status: { type: String, enum: ['pending', 'rejected', 'active', 'sold', 'rented', 'inactive'], default: 'active' },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewedAt: { type: Date },
+    reviewNote: { type: String, trim: true, maxlength: 500 },
     views: { type: Number, default: 0 },
   },
   { timestamps: true }
